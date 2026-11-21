@@ -142,6 +142,57 @@ private theorem sInteger_arch_discrete_lattice (H : AddSubgroup Aᶠₛ)
   exact SetLike.isDiscrete_iff_discreteTopology.mp
     (hRange ▸ ((isEmbedding_thetaArch F).comp hp.isEmbedding).isInducing.isDiscrete_range)
 
+/-- The archimedean projection of a Bruhat kernel vanishes because the kernel is compact. -/
+private theorem thetaArch_eq_zero_of_mem_kernel
+    (a : BruhatStructuralPair (Multiplicative Aₛ)) (x : Multiplicative Aₛ)
+    (hx : x ∈ OrderDual.ofDual a.val.2) : arch x.toAdd.1 = 0 := by
+  let H := OrderDual.ofDual a.val.2
+  let D := lcaAnnihilator H
+  have (v : S) : LocallyCompactSpace (v.val.adicCompletion F) :=
+    locallyCompactSpace_adicCompletion v.val
+  let : LocallyCompactSpace (Multiplicative Aₛ) :=
+    inferInstanceAs (LocallyCompactSpace (InfiniteAdeleRing F × Aᶠₛ))
+  let : T2Space (Multiplicative Aₛ) :=
+    inferInstanceAs (T2Space (((v : InfinitePlace F) → v.Completion) × Aᶠₛ))
+  have hgood := a.property.2.2.1
+  have hH : IsCompact (H : Set (Multiplicative Aₛ)) := by
+    rw [← lcaDualAnnihilator_annihilator H hgood.1]
+    convert (isClosedEmbedding_pontryaginDual_eval (G := Multiplicative Aₛ)).isCompact_preimage
+      (isCompact_lcaAnnihilator D hgood.2.1) using 1
+    ext y
+    exact (mem_lcaDualAnnihilator_iff D y).trans
+      (mem_lcaAnnihilator_iff D (pontryaginDual_eval y)).symm
+  let m (y : Multiplicative Aₛ) := arch y.toAdd.1
+  have hm : Continuous m :=
+    (isEmbedding_thetaArch F).continuous.comp (continuous_fst.comp continuous_toAdd)
+  obtain ⟨B, hB⟩ := hH.exists_bound_of_continuousOn hm.continuousOn
+  by_contra hne
+  have hpos : 0 < ‖m x‖ := norm_pos_iff.mpr hne
+  obtain ⟨n, hn⟩ := exists_nat_gt (B / ‖m x‖)
+  have hpow : m (x ^ n) = n • m x := by
+    change arch ((n • x.toAdd).1) = n • m x
+    exact map_nsmul (arch).toAddMonoidHom n x.toAdd.1
+  have h := hB (x ^ n) (H.pow_mem hx n)
+  rw [hpow, ← Nat.cast_smul_eq_nsmul ℝ, norm_smul, Real.norm_of_nonneg (Nat.cast_nonneg n)] at h
+  exact (not_lt_of_ge h) ((div_lt_iff₀ hpos).mp hn)
+
+/-- The finite projection of the open subgroup of a structural pair lies in a compact set. -/
+private theorem thetaFinite_exists_support_of_stage (a : BruhatStructuralPair (Multiplicative Aₛ)) :
+    ∃ C : Set Aᶠₛ, IsCompact C ∧ ∀ x ∈ a.val.1, (Multiplicative.toAdd x).2 ∈ C := by
+  obtain ⟨W, _, hW, hgen⟩ := a.property.2.1
+  let p (x : a.val.1) : Aᶠₛ := x.val.toAdd.2
+  have hp : Continuous p := continuous_snd.comp (continuous_toAdd.comp continuous_subtype_val)
+  obtain ⟨H, hH, hWH⟩ := finiteSAdele_exists_compact_addSubgroup F S (p '' W) (hW.image hp)
+  let L : Subgroup a.val.1 :=
+    (AddSubgroup.toSubgroup H).comap
+      ((AddMonoidHom.snd _ _).toMultiplicative.comp a.val.1.subtype)
+  have hWL : W ⊆ L := fun x hx ↦ hWH ⟨x, hx, rfl⟩
+  have htop : L = ⊤ := top_unique (hgen ▸ (Subgroup.closure_le L).mpr hWL)
+  refine ⟨H, hH, fun x hx ↦ ?_⟩
+  change (⟨x, hx⟩ : a.val.1) ∈ L
+  rw [htop]
+  trivial
+
 /-- Paper: Proposition 2.3.1.2(1), p. 100. An S-adelic Schwartz–Bruhat function
 vanishes outside a compact set of finite coordinates. Its absolute value times
 any power of the archimedean norm is bounded on the whole S-adele ring. -/
@@ -150,12 +201,64 @@ theorem sAdeleSchwartz_exists_decay_bound (f : ℬₛ) :
       (∀ x : Aₛ, x.2 ∉ C → f (Multiplicative.ofAdd x) = 0) ∧
       ∀ N : ℕ, ∃ B : ℝ, 0 ≤ B ∧
         ∀ x : Aₛ, ‖f (Multiplicative.ofAdd x)‖ * ‖arch x.1‖ ^ N ≤ B := by
-  sorry
+  classical
+  let Q (g : Multiplicative Aₛ → ℂ) : Prop :=
+    ∃ C : Set Aᶠₛ, IsCompact C ∧
+      (∀ x : Aₛ, x.2 ∉ C → g (Multiplicative.ofAdd x) = 0) ∧
+      ∀ N : ℕ, ∃ B : ℝ, 0 ≤ B ∧
+        ∀ x : Aₛ, ‖g (Multiplicative.ofAdd x)‖ * ‖arch x.1‖ ^ N ≤ B
+  have hzero : Q 0 := ⟨∅, isCompact_empty, by simp, fun _ ↦ ⟨0, le_rfl, by simp⟩⟩
+  have hadd (g h : Multiplicative Aₛ → ℂ) (hg : Q g) (hh : Q h) : Q (g + h) := by
+    obtain ⟨C, hC, hgC, hgb⟩ := hg
+    obtain ⟨D, hD, hhD, hhb⟩ := hh
+    refine ⟨C ∪ D, hC.union hD, fun x hx ↦ ?_, fun N ↦ ?_⟩
+    · rw [Pi.add_apply, hgC x (fun h ↦ hx (Or.inl h)),
+        hhD x (fun h ↦ hx (Or.inr h)), add_zero]
+    · obtain ⟨B, hB, hgB⟩ := hgb N
+      obtain ⟨E, hE, hhE⟩ := hhb N
+      refine ⟨B + E, add_nonneg hB hE, fun x ↦ ?_⟩
+      rw [Pi.add_apply]
+      exact (mul_le_mul_of_nonneg_right (norm_add_le _ _) (pow_nonneg (norm_nonneg _) _)).trans
+        (by rw [add_mul]; exact add_le_add (hgB x) (hhE x))
+  have hstage (a : BruhatStructuralPair (Multiplicative Aₛ))
+      (e : ElementaryLCAPresentation a.quotient) (s : SchwartzBruhatStage e) :
+      Q (schwartzBruhatStageRealization a e s) := by
+    refine Exists.elim (thetaFinite_exists_support_of_stage F S a) ?_
+    intro C hC
+    refine ⟨C, hC.1, fun x hx ↦ ?_, fun N ↦ ?_⟩
+    · rw [schwartzBruhatStageRealization_apply, dite_eq_right]
+      exact fun h ↦ hx (hC.2 _ h)
+    · let m : Multiplicative Aₛ →* Multiplicative A∞ :=
+        AddMonoidHom.toMultiplicative ((arch).toAddMonoidHom.comp (AddMonoidHom.fst _ _))
+      have hm : Continuous m :=
+        continuous_ofAdd.comp ((isEmbedding_thetaArch F).continuous.comp
+          (continuous_fst.comp continuous_toAdd))
+      have hker (x : Multiplicative Aₛ) (hx : x ∈ OrderDual.ofDual a.val.2) : m x = 1 :=
+        congrArg Multiplicative.ofAdd (thetaArch_eq_zero_of_mem_kernel F S a x hx)
+      refine Exists.elim (schwartzBruhatStage_exists_norm_decay a e s m hm hker N) ?_
+      intro B hB
+      exact ⟨B, hB.1, fun x ↦ hB.2 (Multiplicative.ofAdd x)⟩
+  let fs : schwartzBruhatSubmodule (Multiplicative Aₛ) := f
+  change Q fs.val
+  refine Submodule.iSup_induction (motive := Q)
+    (fun a : BruhatStructuralPair (Multiplicative Aₛ) ↦
+      ⨆ e : ElementaryLCAPresentation a.quotient, (schwartzBruhatStageRealization a e).range)
+    fs.property (fun a g hg ↦ ?_) hzero hadd
+  refine Submodule.iSup_induction (motive := Q)
+    (fun e : ElementaryLCAPresentation a.quotient ↦ (schwartzBruhatStageRealization a e).range)
+    hg (fun e g h ↦ ?_) hzero hadd
+  obtain ⟨s, hs⟩ := LinearMap.mem_range.mp h
+  exact hs ▸ hstage a e s
 
-/-- Paper: Proposition 2.3.1.2(1), p. 100. On a compact set of S-ideles, the
-norms of the S-unit summands are bounded by a common summable family. -/
-private theorem sLocalAdelicTheta_exists_summable_bound (f : ℬₛ) (K : Set Iₛ) (hK : IsCompact K) :
-    ∃ u : Uₛ → ℝ, Summable u ∧ ∀ ξ g, g ∈ K → ‖thetaTerm f ξ g‖ ≤ u ξ := by
+/-- On a compact set of S-ideles, archimedean dilation preserving the finite
+coordinates admits a single summable majorant even after weighting by a power of the dilation. -/
+private theorem sLocalAdelicTheta_exists_dilation_bound (f : ℬₛ) (p : ℕ)
+    (K : Set Iₛ) (hK : IsCompact K) :
+    ∃ u : Uₛ → ℝ, Summable u ∧
+      ∀ (ξ : Uₛ) (g : Iₛ), g ∈ K → ∀ (r : ℝ), 1 ≤ r → ∀ (y : Aₛ),
+        y.2 = (unitAtS ξ * g).val.2 →
+        ‖arch y.1‖ = r * ‖arch (unitAtS ξ * g).val.1‖ →
+        ‖f (Multiplicative.ofAdd y)‖ * r ^ p ≤ u ξ := by
   classical
   obtain ⟨C, hC, hsupport, hdecay⟩ := sAdeleSchwartz_exists_decay_bound F S f
   -- Undo the idele translates on the finite support simultaneously.
@@ -165,7 +268,8 @@ private theorem sLocalAdelicTheta_exists_summable_bound (f : ℬₛ) (K : Set I�
   obtain ⟨H, hH, hTH⟩ :=
     finiteSAdele_exists_compact_addSubgroup F S (T '' (C ×ˢ K)) ((hC.prod hK).image hT)
   obtain ⟨L, hL, hmemL⟩ := sInteger_arch_discrete_lattice F S H hH
-  let N := Module.finrank ℤ L + 1
+  let N := Module.finrank ℤ L + 1 + p
+  have hN : Module.finrank ℤ L < N := by dsimp [N]; omega
   obtain ⟨B, _, hB⟩ := hdecay N
   let d (ξ : Uₛ) : Aₛ := sDiagonal ξ.val
   let P : Set Uₛ := {ξ | (d ξ).2 ∈ H}
@@ -179,18 +283,20 @@ private theorem sLocalAdelicTheta_exists_summable_bound (f : ℬₛ) (K : Set I�
   have hs : Summable (P.indicator (fun ξ ↦ ‖arch (d ξ).1‖⁻¹ ^ N)) := by
     apply summable_subtype_iff_indicator.mp
     change Summable ((fun z : L ↦ ‖z‖⁻¹ ^ N) ∘ toL)
-    exact (ZLattice.summable_norm_pow_inv L N (Nat.lt_succ_self _)).comp_injective hToL
+    exact (ZLattice.summable_norm_pow_inv L N hN).comp_injective hToL
   obtain ⟨M, hM⟩ := hK.exists_bound_of_continuousOn
     (((isEmbedding_thetaArch F).continuous.comp
       (continuous_fst.comp (Units.continuous_val.comp continuous_inv))).continuousOn :
       ContinuousOn (fun g : Iₛ ↦ arch (g⁻¹).val.1) K)
   let R := max M 1
   have hR : 0 ≤ R := zero_le_one.trans (le_max_right _ _)
-  refine ⟨_, hs.mul_left (B * R ^ N), fun ξ g hg ↦ ?_⟩
-  let y : Aₛ := (unitAtS ξ * g).val
-  have hy : y = d ξ * g.val := rfl
-  have hd : d ξ = y * (g⁻¹).val := by
-    rw [hy, mul_assoc, ← Units.val_mul, mul_inv_cancel, Units.val_one, mul_one]
+  refine ⟨_, hs.mul_left (B * R ^ N), fun ξ g hg r hr y hyfin hyarch ↦ ?_⟩
+  let z : Aₛ := (unitAtS ξ * g).val
+  have hd : d ξ = z * (g⁻¹).val := by
+    change (unitAtS ξ).val = ((unitAtS ξ * g) * g⁻¹).val
+    rw [mul_assoc, mul_inv_cancel, mul_one]
+  change ‖f (Multiplicative.ofAdd y)‖ * r ^ p ≤
+    (B * R ^ N) * P.indicator (fun ξ ↦ ‖arch (d ξ).1‖⁻¹ ^ N) ξ
   by_cases hξ : ξ ∈ P
   · rw [Set.indicator_of_mem hξ, inv_pow, ← div_eq_mul_inv]
     have hpos : 0 < ‖arch (d ξ).1‖ := by
@@ -198,26 +304,42 @@ private theorem sLocalAdelicTheta_exists_summable_bound (f : ℬₛ) (K : Set I�
       exact (Units.map ((arch).toMonoidHom.comp (RingHom.fst _ _).toMonoidHom)
         (unitAtS ξ)).ne_zero
     apply (le_div_iff₀ (pow_pos hpos _)).mpr
-    have hnorm : ‖arch (d ξ).1‖ ≤ ‖arch y.1‖ * R := by
+    have hnorm : ‖arch (d ξ).1‖ ≤ ‖arch z.1‖ * R := by
       rw [hd, Prod.fst_mul, map_mul]
       exact (norm_mul_le _ _).trans
         (mul_le_mul_of_nonneg_left ((hM g hg).trans (le_max_left _ _)) (norm_nonneg _))
+    have hpN : p ≤ N := Nat.le_add_left _ _
+    have hdilation : r ^ p * ‖arch (d ξ).1‖ ^ N ≤ ‖arch y.1‖ ^ N * R ^ N := by
+      rw [hyarch, mul_pow, mul_assoc, ← mul_pow]
+      exact mul_le_mul (pow_le_pow_right₀ hr hpN)
+        (pow_le_pow_left₀ (norm_nonneg _) hnorm _) (pow_nonneg (norm_nonneg _) _)
+        (pow_nonneg (zero_le_one.trans hr) _)
     calc
-      ‖f (Multiplicative.ofAdd y)‖ * ‖arch (d ξ).1‖ ^ N
-          ≤ ‖f (Multiplicative.ofAdd y)‖ * (‖arch y.1‖ * R) ^ N :=
-            mul_le_mul_of_nonneg_left (pow_le_pow_left₀ (norm_nonneg _) hnorm _) (norm_nonneg _)
-      _ = (‖f (Multiplicative.ofAdd y)‖ * ‖arch y.1‖ ^ N) * R ^ N := by
-        rw [mul_pow, mul_assoc]
-      _ ≤ B * R ^ N := mul_le_mul_of_nonneg_right (hB y) (pow_nonneg hR _)
+      (‖f (Multiplicative.ofAdd y)‖ * r ^ p) * ‖arch (d ξ).1‖ ^ N
+          = ‖f (Multiplicative.ofAdd y)‖ * (r ^ p * ‖arch (d ξ).1‖ ^ N) := mul_assoc _ _ _
+      _ ≤ ‖f (Multiplicative.ofAdd y)‖ * (‖arch y.1‖ ^ N * R ^ N) :=
+        mul_le_mul_of_nonneg_left hdilation (norm_nonneg _)
+      _ ≤ B * R ^ N := by
+        rw [← mul_assoc]
+        exact mul_le_mul_of_nonneg_right (hB y) (pow_nonneg hR _)
   · have hyC : y.2 ∉ C := by
       intro h
       apply hξ
       change (d ξ).2 ∈ H
       rw [hd]
-      exact hTH ⟨(y.2, g), ⟨h, hg⟩, rfl⟩
-    change ‖f (Multiplicative.ofAdd y)‖ ≤
-      (B * R ^ N) * P.indicator (fun ξ ↦ ‖arch (d ξ).1‖⁻¹ ^ N) ξ
-    rw [hsupport y hyC, norm_zero, Set.indicator_of_notMem hξ, mul_zero]
+      refine hTH ⟨(y.2, g), ⟨h, hg⟩, ?_⟩
+      change y.2 * (g⁻¹).val.2 = z.2 * (g⁻¹).val.2
+      rw [hyfin]
+    rw [hsupport y hyC, norm_zero, zero_mul, Set.indicator_of_notMem hξ, mul_zero]
+
+/-- Paper: Proposition 2.3.1.2(1), p. 100. On a compact set of S-ideles, the
+norms of the S-unit summands are bounded by a common summable family. -/
+private theorem sLocalAdelicTheta_exists_summable_bound (f : ℬₛ) (K : Set Iₛ) (hK : IsCompact K) :
+    ∃ u : Uₛ → ℝ, Summable u ∧ ∀ ξ g, g ∈ K → ‖thetaTerm f ξ g‖ ≤ u ξ := by
+  obtain ⟨u, hu, hle⟩ := sLocalAdelicTheta_exists_dilation_bound F S f 0 K hK
+  exact ⟨u, hu, fun ξ g hg ↦ by
+    simpa only [pow_zero, mul_one] using hle ξ g hg 1 le_rfl (unitAtS ξ * g).val rfl
+      (one_mul _).symm⟩
 
 /-- Paper: Proposition 2.3.1.2(1), p. 100. The series of norms of the
 S-unit translates is summable uniformly on each compact set of S-ideles. -/
@@ -237,7 +359,14 @@ theorem sLocalAdelicTheta_hasSumUniformlyOn (f : ℬₛ) (K : Set Iₛ) (hK : Is
 
 /-- Paper: Proposition 2.3.1.2(1), p. 100. The S-unit sum is a continuous
 function of the S-idele. -/
-theorem sLocalAdelicTheta_continuous (f : ℬₛ) : Continuous (thetaSum f) := by sorry
+theorem sLocalAdelicTheta_continuous (f : ℬₛ) : Continuous (thetaSum f) := by
+  let : LocallyCompactSpace Iₛ := (sIdeleGroup_description F S).2.2.1
+  have hs := hasSumLocallyUniformly_of_forall_compact
+    (fun K hK ↦ sLocalAdelicTheta_hasSumUniformlyOn F S f K hK)
+  exact TendstoLocallyUniformly.continuous hs
+    (Eventually.of_forall fun t ↦ continuous_finsetSum t fun ξ _ ↦
+      (schwartzBruhat_continuous f).comp (continuous_ofAdd.comp
+        (Units.continuous_val.comp (continuous_const.mul continuous_id)))).frequently
 
 /-- Paper: Definition 2.3.1.1, p. 99. Forming the continuous S-unit sum
 is complex linear in the test function. -/
@@ -298,11 +427,141 @@ theorem sLocalAdelicThetaOnClasses_mk (f : ℬₛ) (g : Iₛ) :
 -- idelic norm scales the Euclidean sup norm by t. Even at a single complex
 -- place a positive-real section scales it by √t.
 
+section LargeNorm
+
+open scoped Classical
+
+local notation "A∞" => mixedEmbedding.mixedSpace F
+local notation "arch" => InfiniteAdeleRing.ringEquiv_mixedSpace F
+set_option quotPrecheck false in
+local notation "τ" => (Units.map (adeleProjection F S).toMonoidHom).comp
+  (canonicalIdeleNormSection F)
+local notation "degree" => Module.finrank ℚ F
+local notation "root" => fun t : ℝ≥0ˣ ↦ (valueℝ t) ^ (degree : ℝ)⁻¹
+
+/-- The projected canonical section has S-idelic norm equal to its input. -/
+private theorem thetaSection_rightInverse (t : ℝ≥0ˣ) : sIdeleNorm F S (τ t) = t := by
+  let A := integralAdelesOutside F S
+  let s := canonicalIdeleNormSection F
+  have hmem (u : ℝ≥0ˣ) : (s u).val ∈ A := by
+    simp only [A, integralAdelesOutside, Subring.mem_iInf]
+    intro v _
+    change (canonicalIdeleNormSection F u).val.2 v ∈ v.adicCompletionIntegers F
+    rw [canonicalIdeleNormSection_finite F u]
+    exact (v.adicCompletionIntegers F).one_mem
+  have ht : s t ∈ A.toSubmonoid.units := by
+    refine ⟨hmem t, ?_⟩
+    change ((s t)⁻¹).val ∈ A
+    rw [← map_inv]
+    exact hmem t⁻¹
+  let g := A.toSubmonoid.unitsEquivUnitsType ⟨s t, ht⟩
+  exact ((sIdeleNorm_spec F S).1 g).symm.trans (canonicalIdeleNormSection_rightInverse F t)
+
+/-- The canonical section acts by the same positive scalar at every infinite place. -/
+private theorem thetaSection_arch (t : ℝ≥0ˣ) (x : InfiniteAdeleRing F) :
+    arch (x * (τ t).val.1) = root t • arch x := by
+  have h : arch (τ t).val.1 = root t • (1 : A∞) := by
+    rw [InfiniteAdeleRing.ringEquiv_mixedSpace_apply]
+    apply Prod.ext <;> funext v
+    · apply Complex.ofReal_injective
+      rw [InfinitePlace.Completion.extensionEmbeddingOfIsReal_apply]
+      change InfinitePlace.Completion.extensionEmbedding v.val
+        ((canonicalIdeleNormSection F t).val.1 v) = ((root t * 1 : ℝ) : ℂ)
+      rw [mul_one]
+      exact canonicalIdeleNormSection_infinite F t v
+    · change InfinitePlace.Completion.extensionEmbedding v.val
+        ((canonicalIdeleNormSection F t).val.1 v) = (root t : ℂ) * 1
+      rw [mul_one]
+      exact canonicalIdeleNormSection_infinite F t v
+  rw [map_mul, h, mul_smul_comm, mul_one]
+
+/-- The norm-one S-idele classes are covered by the image of a compact set of S-ideles. -/
+private theorem exists_compact_lifts_normOne :
+    ∃ K : Set Iₛ, IsCompact K ∧
+      ∀ c : Jₛ, sIdeleQuotientNorm F S c = 1 → ∃ k ∈ K, classOf k = c := by
+  let q : Iₛ → Jₛ := classOf
+  have hq : IsOpenQuotientMap q := QuotientGroup.isOpenQuotientMap_mk
+  let : LocallyCompactSpace Iₛ := (sIdeleGroup_description F S).2.2.1
+  choose K hK hKi using (fun k : Iₛ ↦ exists_compact_mem_nhds k)
+  have hc : IsCompact (sIdeleQuotientNorm F S ⁻¹' {1}) :=
+    (isProperMap_sIdeleQuotientNorm F S).isCompact_preimage isCompact_singleton
+  have hcover : (sIdeleQuotientNorm F S ⁻¹' {1}) ⊆ ⋃ k, q '' interior (K k) := by
+    intro c _
+    obtain ⟨k, rfl⟩ := hq.surjective c
+    exact Set.mem_iUnion.mpr ⟨k, k, mem_interior_iff_mem_nhds.mpr (hKi k), rfl⟩
+  obtain ⟨E, hE⟩ := hc.elim_finite_subcover _ (fun _ ↦ hq.isOpenMap _ isOpen_interior) hcover
+  refine ⟨⋃ k ∈ E, K k, E.isCompact_biUnion fun k _ ↦ hK k, fun c hc ↦ ?_⟩
+  obtain ⟨k, hk, x, hx, rfl⟩ := Set.mem_iUnion₂.mp (hE hc)
+  exact ⟨x, Set.mem_iUnion₂.mpr ⟨k, hk, interior_subset hx⟩, rfl⟩
+
+/-- The weighted summable majorant applies to the field-degree root dilation. -/
+private theorem sLocalAdelicTheta_exists_scaled_bound (f : ℬₛ) (N : ℕ)
+    (K : Set Iₛ) (hK : IsCompact K) :
+    ∃ u : Uₛ → ℝ, Summable u ∧ ∀ ξ k, k ∈ K → ∀ t : ℝ≥0ˣ, 1 ≤ valueℝ t →
+      ‖thetaTerm f ξ (k * τ t)‖ * (valueℝ t) ^ N ≤ u ξ := by
+  obtain ⟨u, hu, hle⟩ := sLocalAdelicTheta_exists_dilation_bound F S f (degree * N) K hK
+  refine ⟨u, hu, fun ξ k hk t ht ↦ ?_⟩
+  have hr : 1 ≤ root t := Real.one_le_rpow ht (by positivity)
+  have hpow : root t ^ (degree * N) = valueℝ t ^ N := by
+    rw [pow_mul, Real.rpow_inv_natCast_pow (zero_le_one.trans ht)
+      (Module.finrank_pos (R := ℚ) (M := F)).ne']
+  let y : Aₛ := (unitAtS ξ * (k * τ t)).val
+  let z : Aₛ := (unitAtS ξ * k).val
+  have hy : y = z * (τ t).val := by
+    change (unitAtS ξ * (k * τ t)).val = ((unitAtS ξ * k) * τ t).val
+    rw [mul_assoc]
+  have hfin : (τ t).val.2 = 1 := by
+    funext v
+    change (canonicalIdeleNormSection F t).val.2 v = 1
+    rw [canonicalIdeleNormSection_finite]
+    rfl
+  have hyfin : y.2 = z.2 := by rw [hy, Prod.snd_mul, hfin, mul_one]
+  have hyarch : ‖arch y.1‖ = root t * ‖arch z.1‖ := by
+    rw [hy, Prod.fst_mul, thetaSection_arch, norm_smul, Real.norm_eq_abs,
+      abs_of_nonneg (zero_le_one.trans hr)]
+  rw [← hpow]
+  exact hle ξ k hk (root t) hr y hyfin hyarch
+
 /-- Paper: Proposition 2.3.1.2(2), p. 100. As the S-idelic norm tends
 to infinity, S-local theta decays at every positive inverse power. -/
 theorem sLocalAdelicTheta_decay_large (f : ℬₛ) (N : ℕ) (hN : 1 ≤ N) :
     ∃ C T : ℝ, 0 < C ∧ 0 < T ∧ ∀ g : Iₛ, T < normℝ g →
-      ‖sLocalAdelicTheta F S f g‖ ≤ C * ((normℝ g) ^ N)⁻¹ := by sorry
+      ‖sLocalAdelicTheta F S f g‖ ≤ C * ((normℝ g) ^ N)⁻¹ := by
+  clear hN
+  refine Exists.elim (exists_compact_lifts_normOne F S) ?_
+  intro K hK
+  refine Exists.elim (sLocalAdelicTheta_exists_scaled_bound F S f N K hK.1) ?_
+  intro u hu
+  refine ⟨max (∑' ξ, u ξ) 1, 1, zero_lt_one.trans_le (le_max_right _ _), zero_lt_one, ?_⟩
+  intro g hg
+  let t := sIdeleNorm F S g
+  let s := τ t
+  let a := g / s
+  have ha : sIdeleQuotientNorm F S (classOf a) = 1 := by
+    rw [sIdeleQuotientNorm_mk]
+    change sIdeleNorm F S (g / s) = 1
+    rw [map_div, thetaSection_rightInverse, div_self']
+  refine Exists.elim (hK.2 (classOf a) ha) ?_
+  intro k hk
+  have hclass : classOf (k * s) = classOf g := by
+    rw [QuotientGroup.mk_mul, hk.2, ← QuotientGroup.mk_mul, div_mul_cancel]
+  have htheta : sLocalAdelicTheta F S f g = thetaSum f (k * s) :=
+    (sLocalAdelicTheta_factorsThrough F S f hclass).symm.trans
+      (sLocalAdelicTheta_apply F S f (k * s))
+  have hp : 0 < valueℝ t ^ N := pow_pos (zero_lt_one.trans hg) _
+  have hle (ξ : Uₛ) : ‖thetaTerm f ξ (k * s)‖ ≤ u ξ * (valueℝ t ^ N)⁻¹ := by
+    rw [← div_eq_mul_inv, le_div_iff₀ hp]
+    exact hu.2 ξ k hk.1 t hg.le
+  have hb := hu.1.mul_right (valueℝ t ^ N)⁻¹
+  have hs := hb.of_nonneg_of_le (fun ξ ↦ norm_nonneg (thetaTerm f ξ (k * s))) hle
+  calc
+    ‖sLocalAdelicTheta F S f g‖ = ‖thetaSum f (k * s)‖ := congrArg norm htheta
+    _ ≤ ∑' ξ, ‖thetaTerm f ξ (k * s)‖ := norm_tsum_le_tsum_norm hs
+    _ ≤ ∑' ξ, u ξ * (valueℝ t ^ N)⁻¹ := hs.tsum_le_tsum hle hb
+    _ = (∑' ξ, u ξ) * (valueℝ t ^ N)⁻¹ := tsum_mul_right
+    _ ≤ _ := mul_le_mul_of_nonneg_right (le_max_left _ _) (inv_nonneg.mpr hp.le)
+
+end LargeNorm
 
 /-- Paper: Proposition 2.3.1.2(3), p. 100. The large-norm decay constant
 and threshold can be chosen uniformly for a bounded set of test functions. -/
