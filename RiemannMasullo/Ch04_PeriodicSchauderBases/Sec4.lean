@@ -709,8 +709,36 @@ include hms hτ hμ hν in
 mass one gives the same Weil quotient measure as dividing by that mass
 after taking the quotient. -/
 theorem modulatedCyclicQuotient_canonicalHaar :
-    IsWeilQuotientMeasure Γ (canonicalModulatedHaar m hm) Measure.count ((μ₁ univ)⁻¹ • ν) :=
-  by sorry
+    IsWeilQuotientMeasure Γ (canonicalModulatedHaar m hm) Measure.count ((μ₁ univ)⁻¹ • ν) := by
+  have : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  have : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  have : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  have : SFinite (positiveRealHaar : Measure ℝ≥0ˣ) := by unfold positiveRealHaar; infer_instance
+  have : SecondCountableTopology K := TopologicalSpace.Subtype.secondCountableTopology _
+  have hφ : Continuous fun z : K × ℝ≥0ˣ ↦ (z.1 : G) * τ z.2 := by fun_prop
+  -- The canonical measure is `μ` divided by the mass of the norm-one group.
+  let μ₀ : Measure K := Measure.haarMeasure ⊤
+  have hμ₀ : μ₀ univ = 1 := Measure.haarMeasure_self
+  have hcan := canonicalModulatedHaar_eq_map_prod m hm τ hτ μ₀ hμ₀
+  have hscale := Measure.isMulLeftInvariant_eq_smul μ₁ μ₀
+  set c := Measure.haarScalarFactor μ₁ μ₀
+  have hc : μ₁ univ = c := by
+    conv_lhs => rw [hscale]
+    rw [smul_apply, hμ₀, ENNReal.smul_def, smul_eq_mul, mul_one]
+  have h0 : μ₁ univ ≠ 0 := Measure.measure_univ_ne_zero.mpr (NeZero.ne μ₁)
+  have htop : μ₁ univ ≠ ∞ := measure_ne_top μ₁ univ
+  have hprod : μ₁.prod positiveRealHaar = c • μ₀.prod positiveRealHaar := by
+    rw [← Measure.prod_smul_left, ← hscale]
+  have hμc : μ = μ₁ univ • canonicalModulatedHaar m hm := by
+    rw [hμ, hprod, Measure.map_smul _ hφ.aemeasurable, hcan, ENNReal.smul_def, hc]
+  have hcanμ : canonicalModulatedHaar m hm = (μ₁ univ)⁻¹ • μ := by
+    rw [hμc, smul_smul, ENNReal.inv_mul_cancel h0 htop, one_smul]
+  -- Rescale both sides of Weil's formula.
+  obtain ⟨hνH, hνR, hW⟩ := hν
+  refine ⟨Measure.IsHaarMeasure.smul _ (ENNReal.inv_ne_zero.mpr htop)
+      (ENNReal.inv_ne_top.mpr h0), Measure.Regular.smul (ENNReal.inv_ne_top.mpr h0),
+    fun f hf ↦ ?_⟩
+  rw [hcanμ, integral_smul_measure, integral_smul_measure, hW f hf]
 
 -- TODO(paper-gap): Remark 4.4.2.8 gives no transport map for the topology of
 -- the multiplier space. Its algebraic membership is used in Lemma 4.4.2.6(2b).
