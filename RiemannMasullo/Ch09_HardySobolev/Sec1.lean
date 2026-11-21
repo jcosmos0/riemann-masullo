@@ -1269,7 +1269,109 @@ theorem modulatedSobolev_toL1 (_hm : IsModulation m) (_hsurj : Function.Surjecti
     ∃ (J : ModulatedSobolev m μ s →L[ℂ] Lp ℂ 1 μ) (C : ℝ),
       Function.Injective J ∧ 0 < C ∧ ‖J‖ ≤ C ∧
       ∀ f : ModulatedSobolev m μ s,
-        Integrable (f : G → ℂ) μ ∧ (J f : G → ℂ) =ᵐ[μ] (f : G → ℂ) := by sorry
+        Integrable (f : G → ℂ) μ ∧ (J f : G → ℂ) =ᵐ[μ] (f : G → ℂ) := by
+  -- `P x = 1 + |log |x||²`; the Sobolev measure has density `P^(s/2)`.
+  have hne (x : G) : (((m x).val : ℝ≥0) : ℝ) ≠ 0 := NNReal.coe_ne_zero.mpr (m x).ne_zero
+  have hL : Continuous fun x ↦ Real.log ((m x).val : ℝ) :=
+    (NNReal.continuous_coe.comp (Units.continuous_val.comp m.continuous)).log hne
+  have hPpos (x : G) : 0 < 1 + |Real.log ((m x).val : ℝ)| ^ 2 :=
+    add_pos_of_pos_of_nonneg one_pos (sq_nonneg _)
+  have hP : Continuous fun x ↦ 1 + |Real.log ((m x).val : ℝ)| ^ 2 :=
+    continuous_const.add (hL.abs.pow 2)
+  have hρ : Continuous fun x ↦ (1 + (modulatedSobolevWeight m x : ℝ) ^ 2) ^ (s / 2) :=
+    hP.rpow_const fun x ↦ Or.inl (hPpos x).ne'
+  have hac₁ : sobolevMeasure μ (modulatedSobolevWeight m) s ≪ μ :=
+    withDensity_absolutelyContinuous _ _
+  have hac₂ : μ ≪ sobolevMeasure μ (modulatedSobolevWeight m) s :=
+    withDensity_absolutelyContinuous' (ENNReal.continuous_ofReal.comp hρ).aemeasurable
+      (ae_of_all _ fun x ↦ (ENNReal.ofReal_pos.mpr (Real.rpow_pos_of_pos (hPpos x) _)).ne')
+  set I := ∫ x, (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 2) ∂μ
+  have hI : Integrable (fun x ↦ (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 2)) μ :=
+    (modulatedSobolev_reciprocal_integrable_iff m μ _hm _hsurj (by linarith)).mpr _hs
+  -- Cauchy–Schwarz against the weight, as in the paper.
+  have key (f : ModulatedSobolev m μ s) :
+      Integrable (f : G → ℂ) μ ∧
+        ∫ x, ‖(f : G → ℂ) x‖ ∂μ ≤ Real.sqrt I * ‖f‖ := by
+    obtain ⟨hfi, hfn⟩ := modulatedSobolev_norm m μ s f
+    have hfm : AEStronglyMeasurable (f : G → ℂ) μ := (Lp.aestronglyMeasurable f).mono_ac hac₂
+    set a : G → ℝ := fun x ↦
+      ‖(f : G → ℂ) x‖ * (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (s / 4)
+    set b : G → ℝ := fun x ↦ (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 4)
+    have hab (x : G) : a x * b x = ‖(f : G → ℂ) x‖ := by
+      simp only [a, b]
+      rw [mul_assoc, ← Real.rpow_add (hPpos x), show s / 4 + -s / 4 = 0 by ring,
+        Real.rpow_zero, mul_one]
+    have ha2 (x : G) : a x ^ 2 =
+        ‖(f : G → ℂ) x‖ ^ 2 * (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (s / 2) := by
+      simp only [a]
+      rw [mul_pow]
+      congr 1
+      rw [← Real.rpow_natCast _ 2, ← Real.rpow_mul (hPpos x).le]
+      norm_num; ring_nf
+    have hb2 (x : G) : b x ^ 2 = (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 2) := by
+      simp only [b]
+      rw [← Real.rpow_natCast _ 2, ← Real.rpow_mul (hPpos x).le]
+      norm_num; ring_nf
+    have hbc : Continuous b := hP.rpow_const fun x ↦ Or.inl (hPpos x).ne'
+    have ham : MemLp a 2 μ :=
+      (memLp_two_iff_integrable_sq (hfm.norm.mul
+        (hP.rpow_const fun x ↦ Or.inl (hPpos x).ne').aestronglyMeasurable)).mpr
+        (hfi.congr (ae_of_all _ fun x ↦ (ha2 x).symm))
+    have hbm : MemLp b 2 μ :=
+      (memLp_two_iff_integrable_sq hbc.aestronglyMeasurable).mpr
+        (hI.congr (ae_of_all _ fun x ↦ (hb2 x).symm))
+    have hint : Integrable (fun x ↦ ‖(f : G → ℂ) x‖) μ :=
+      (ham.integrable_mul hbm).congr (ae_of_all _ hab)
+    refine ⟨(integrable_norm_iff hfm).mp hint, ?_⟩
+    have hH := integral_mul_le_Lp_mul_Lq_of_nonneg Real.HolderConjugate.two_two
+      (ae_of_all _ fun x ↦ mul_nonneg (norm_nonneg _) (Real.rpow_nonneg (hPpos x).le _))
+      (ae_of_all _ fun x ↦ Real.rpow_nonneg (hPpos x).le _)
+      (by rw [ENNReal.ofReal_ofNat]; exact ham) (by rw [ENNReal.ofReal_ofNat]; exact hbm)
+    have e1 : ∫ x, a x * b x ∂μ = ∫ x, ‖(f : G → ℂ) x‖ ∂μ :=
+      integral_congr_ae (ae_of_all _ hab)
+    have e2 : ∫ x, a x ^ (2 : ℝ) ∂μ =
+        ∫ x, ‖(f : G → ℂ) x‖ ^ 2 *
+          (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (s / 2) ∂μ :=
+      integral_congr_ae (ae_of_all _ fun x ↦ by beta_reduce; rw [Real.rpow_two, ha2])
+    have e3 : ∫ x, b x ^ (2 : ℝ) ∂μ = I :=
+      integral_congr_ae (ae_of_all _ fun x ↦ by beta_reduce; rw [Real.rpow_two, hb2])
+    calc ∫ x, ‖(f : G → ℂ) x‖ ∂μ = ∫ x, a x * b x ∂μ := e1.symm
+      _ ≤ (∫ x, a x ^ (2 : ℝ) ∂μ) ^ (1 / (2 : ℝ)) *
+            (∫ x, b x ^ (2 : ℝ) ∂μ) ^ (1 / (2 : ℝ)) := hH
+      _ = Real.sqrt I * ‖f‖ := by
+        rw [e2, e3, hfn, Real.sqrt_eq_rpow, Real.sqrt_eq_rpow, mul_comm]
+  -- The inclusion as a linear map into L¹.
+  let J₀ : ModulatedSobolev m μ s →ₗ[ℂ] Lp ℂ 1 μ :=
+    { toFun := fun f ↦ (key f).1.toL1 _
+      map_add' := fun f g ↦ by
+        apply Lp.ext
+        filter_upwards [(key (f + g)).1.coeFn_toL1, (key f).1.coeFn_toL1,
+          (key g).1.coeFn_toL1, Lp.coeFn_add ((key f).1.toL1 _) ((key g).1.toL1 _),
+          hac₂.ae_le (Lp.coeFn_add f g)] with x h1 h2 h3 h4 h5
+        rw [h1, h4, Pi.add_apply, h2, h3, h5, Pi.add_apply]
+      map_smul' := fun c f ↦ by
+        apply Lp.ext
+        filter_upwards [(key (c • f)).1.coeFn_toL1, (key f).1.coeFn_toL1,
+          Lp.coeFn_smul c ((key f).1.toL1 _), hac₂.ae_le (Lp.coeFn_smul c f)]
+          with x h1 h2 h3 h4
+        rw [h1, RingHom.id_apply, h3, Pi.smul_apply, h2, h4, Pi.smul_apply] }
+  have hJ₀ (f : ModulatedSobolev m μ s) : ‖J₀ f‖ ≤ Real.sqrt I * ‖f‖ := by
+    change ‖(key f).1.toL1 _‖ ≤ _
+    rw [L1.norm_of_fun_eq_integral_norm]
+    exact (key f).2
+  let J := J₀.mkContinuous (Real.sqrt I) hJ₀
+  refine ⟨J, Real.sqrt I + 1, ?_, by positivity,
+    (J₀.mkContinuous_norm_le (Real.sqrt_nonneg _) hJ₀).trans (by linarith),
+    fun f ↦ ⟨(key f).1, (key f).1.coeFn_toL1⟩⟩
+  rw [injective_iff_map_eq_zero]
+  intro f hf
+  have h0 : ((key f).1.toL1 (f : G → ℂ) : G → ℂ) =ᵐ[μ] 0 := by
+    have : (key f).1.toL1 (f : G → ℂ) = 0 := hf
+    rw [this]
+    exact Lp.coeFn_zero _ _ _
+  have h1 : (f : G → ℂ) =ᵐ[sobolevMeasure μ (modulatedSobolevWeight m) s] 0 :=
+    hac₁.ae_le ((key f).1.coeFn_toL1.symm.trans h0)
+  exact Lp.ext (h1.trans (Lp.coeFn_zero _ _ _).symm)
 
 end Modulated
 
