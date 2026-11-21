@@ -702,7 +702,17 @@ include hm hγ hτ hμ hν in
 /-- Paper: Remark 4.4.2.7, p. 194. Dividing the quotient Haar measure by its
 specified total mass gives the probability Haar measure. -/
 theorem modulatedCyclicQuotient_probabilityHaar :
-    IsProbabilityMeasure ((ENNReal.ofReal L * μ₁ univ)⁻¹ • ν) := by sorry
+    IsProbabilityMeasure ((ENNReal.ofReal L * μ₁ univ)⁻¹ • ν) := by
+  have hL : 0 < L := Real.log_pos (by exact_mod_cast hγ)
+  have : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  have h0 : ENNReal.ofReal L * μ₁ univ ≠ 0 :=
+    mul_ne_zero (ENNReal.ofReal_pos.mpr hL).ne' (Measure.measure_univ_ne_zero.mpr (NeZero.ne μ₁))
+  have htop : ENNReal.ofReal L * μ₁ univ ≠ ∞ :=
+    ENNReal.mul_ne_top ENNReal.ofReal_ne_top (measure_ne_top μ₁ univ)
+  constructor
+  rw [Measure.smul_apply, smul_eq_mul,
+    modulatedCyclicQuotient_measure_univ m γ hm hγ μ₁ ν τ hτ μ hμ hν,
+    ENNReal.inv_mul_cancel h0 htop]
 
 include hms hτ hμ hν in
 /-- Paper: Remark 4.4.2.7, p. 194. Normalizing the norm-one Haar measure to
