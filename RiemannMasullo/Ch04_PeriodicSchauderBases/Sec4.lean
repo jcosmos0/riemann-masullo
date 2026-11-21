@@ -4,6 +4,8 @@ public import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec1
 public import RiemannMasullo.AppD_SchwartzBruhat.Sec3b
 public import RiemannMasullo.Ch03_IdelicZeta.Sec3
 import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Pow.Complex
+import RiemannMasullo.ForMathlib.MeasureTheory.Group.Arithmetic
+import RiemannMasullo.ForMathlib.MeasureTheory.Measure.Count
 
 /-!
 # Exponential system on monogenic quotients
@@ -573,7 +575,128 @@ include hm hγ hτ hμ hν in
 /-- Paper: Remark 4.4.2.7, p. 194. The Weil quotient measure has total mass
 equal to the product of the logarithmic period and the volume of the norm-one group. -/
 theorem modulatedCyclicQuotient_measure_univ :
-    ν univ = ENNReal.ofReal L * μ₁ univ := by sorry
+    ν univ = ENNReal.ofReal L * μ₁ univ := by
+  have hL : 0 < L := Real.log_pos (by exact_mod_cast hγ)
+  have : DiscreteTopology Γ := modulated_zpowers_discrete m γ hγ
+  have hΓ : IsClosed (Γ : Set G) := modulatedCyclicSubgroup_closed m γ hγ
+  have : CompactSpace K := isCompact_iff_compactSpace.mp hm.isCompact_ker
+  have : (Measure.count : Measure Γ).IsHaarMeasure := count_isHaarMeasure_of_discreteTopology
+  have : (Measure.count : Measure Γ).Regular := count_regular_of_discreteTopology
+  have : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  have : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  have hφ : Continuous fun z : K × ℝ≥0ˣ ↦ (z.1 : G) * τ z.2 := by fun_prop
+  -- The measure `μ` is a Haar measure: a multiple of the canonical one.
+  let μ₀ : Measure K := Measure.haarMeasure ⊤
+  have hcan := canonicalModulatedHaar_eq_map_prod m hm τ hτ μ₀ Measure.haarMeasure_self
+  have : (canonicalModulatedHaar m hm).IsHaarMeasure :=
+    (Classical.choose_spec (existsUnique_canonicalModulatedHaar m hm).exists).1
+  have : SFinite (positiveRealHaar : Measure ℝ≥0ˣ) := by unfold positiveRealHaar; infer_instance
+  have : SecondCountableTopology K := TopologicalSpace.Subtype.secondCountableTopology _
+  have hscale := Measure.isMulLeftInvariant_eq_smul μ₁ μ₀
+  set c := Measure.haarScalarFactor μ₁ μ₀
+  have hc : (c : ℝ≥0∞) ≠ 0 := by
+    intro h
+    rw [ENNReal.coe_eq_zero] at h
+    rw [h, zero_smul] at hscale
+    exact NeZero.ne μ₁ hscale
+  have hprod : μ₁.prod positiveRealHaar = c • μ₀.prod positiveRealHaar := by
+    rw [← Measure.prod_smul_left, ← hscale]
+  have hμc : μ = (c : ℝ≥0∞) • canonicalModulatedHaar m hm := by
+    rw [hμ, hprod, Measure.map_smul _ hφ.aemeasurable, hcan, ENNReal.smul_def]
+  have : μ.IsHaarMeasure := hμc ▸ Measure.IsHaarMeasure.smul _ hc ENNReal.coe_ne_top
+  have : μ.Regular := by
+    let μH : Measure G := Measure.haarMeasure (Classical.arbitrary _)
+    rw [Measure.isMulLeftInvariant_eq_smul μ μH]
+    exact Measure.Regular.smul ENNReal.coe_ne_top
+  -- A Borel fundamental domain for the cyclic subgroup.
+  let ℓ : G → ℝ := fun x ↦ Real.log ((m x).val : ℝ)
+  have hpos (x : G) : (0 : ℝ) < (m x).val := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have hℓ (x : G) (k : ℤ) : ℓ (x * γ ^ k) = ℓ x + k * L := by
+    simp only [ℓ, map_mul, map_zpow, Units.val_mul, Units.val_zpow_eq_zpow_val, NNReal.coe_mul,
+      NNReal.coe_zpow, Real.log_mul (hpos x).ne' (zpow_pos (hpos γ) k).ne', Real.log_zpow]
+  let Δ : Set G := {x | ((m x).val : ℝ) ∈ Ico 1 ((m γ).val : ℝ)}
+  have hmemΔ (x : G) : x ∈ Δ ↔ ℓ x ∈ Ico 0 L := by
+    change ((m x).val : ℝ) ∈ Ico 1 ((m γ).val : ℝ) ↔ _
+    simp only [mem_Ico, ℓ, Real.log_nonneg_iff (hpos x), Real.log_lt_log_iff (hpos x) (hpos γ)]
+  have hcontm : Continuous fun x : G ↦ ((m x).val : ℝ) :=
+    NNReal.continuous_coe.comp (Units.continuous_val.comp m.continuous)
+  have hΔ : MeasurableSet Δ := hcontm.measurable measurableSet_Ico
+  have hbij : Bijective (fun x : Δ ↦ (QuotientGroup.mk x.val : Q)) := by
+    constructor
+    · rintro ⟨x, hx⟩ ⟨y, hy⟩ hxy
+      obtain ⟨k, hk⟩ := Subgroup.mem_zpowers_iff.mp (QuotientGroup.eq.mp hxy)
+      have hyx : y = x * γ ^ k := by rw [hk, mul_inv_cancel_left]
+      have hx' := (hmemΔ x).mp hx
+      have hy' := (hmemΔ y).mp hy
+      rw [hyx, hℓ] at hy'
+      have h1 : (k : ℝ) < 1 := by
+        by_contra h
+        nlinarith [hx'.1, hy'.2]
+      have h2 : (-1 : ℝ) < k := by
+        by_contra h
+        nlinarith [hx'.2, hy'.1]
+      have hk0 : k = 0 := by
+        have : k < 1 := by exact_mod_cast h1
+        have : -1 < k := by exact_mod_cast h2
+        omega
+      exact Subtype.ext (show x = y by rw [hyx, hk0, zpow_zero, mul_one])
+    · intro q
+      obtain ⟨x, rfl⟩ := QuotientGroup.mk_surjective q
+      let k : ℤ := -⌊ℓ x / L⌋
+      refine ⟨⟨x * γ ^ k, (hmemΔ _).mpr ?_⟩, ?_⟩
+      · rw [hℓ]
+        have hf := Int.floor_le (ℓ x / L)
+        have hf' := Int.lt_floor_add_one (ℓ x / L)
+        rw [le_div_iff₀ hL] at hf
+        rw [div_lt_iff₀ hL] at hf'
+        constructor
+        · simp only [k, Int.cast_neg]; nlinarith
+        · simp only [k, Int.cast_neg]; nlinarith
+      · exact QuotientGroup.mk_mul_of_mem x (Subgroup.zpow_mem_zpowers γ k)
+  -- The mass of the fundamental domain.
+  have hPR : positiveRealHaar {t : ℝ≥0ˣ | (t.val : ℝ) ∈ Ico 1 ((m γ).val : ℝ)} =
+      ENNReal.ofReal L := by
+    let ex (x : ℝ) := Units.mk0 (Real.exp x).toNNReal (by positivity)
+    have he : Measurable ex :=
+      measurable_comap_iff.mpr (continuous_real_toNNReal.comp Real.continuous_exp).measurable
+    have hset : MeasurableSet {t : ℝ≥0ˣ | (t.val : ℝ) ∈ Ico 1 ((m γ).val : ℝ)} :=
+      measurableSet_Ico.preimage
+        (NNReal.continuous_coe.measurable.comp MeasurableSpace.le_map_comap)
+    change (volume.map ex) _ = _
+    rw [Measure.map_apply he hset]
+    have hpre : ex ⁻¹' {t | (t.val : ℝ) ∈ Ico 1 ((m γ).val : ℝ)} = Ico 0 L := by
+      ext x
+      change (1 ≤ ((Real.exp x).toNNReal : ℝ) ∧ ((Real.exp x).toNNReal : ℝ) < _) ↔ _
+      rw [Real.coe_toNNReal _ (Real.exp_pos x).le, Real.one_le_exp_iff,
+        ← Real.lt_log_iff_exp_lt (hpos γ)]
+      rfl
+    rw [hpre, Real.volume_Ico, sub_zero]
+  have hμΔ : μ Δ = μ₁ univ * ENNReal.ofReal L := by
+    rw [hμ, Measure.map_apply hφ.measurable hΔ]
+    have hpre : (fun z : K × ℝ≥0ˣ ↦ (z.1 : G) * τ z.2) ⁻¹' Δ =
+        univ ×ˢ {t : ℝ≥0ˣ | (t.val : ℝ) ∈ Ico 1 ((m γ).val : ℝ)} := by
+      ext ⟨k, t⟩
+      have hk : m (k : G) = 1 := k.property
+      change ((m ((k : G) * τ t)).val : ℝ) ∈ Ico 1 ((m γ).val : ℝ) ↔ _
+      rw [map_mul, hk, one_mul, hτ t]
+      simp
+    rw [hpre, Measure.prod_prod, hPR]
+  -- Weil's formula for the constant function one.
+  have hΔfin : μ Δ ≠ ∞ := by
+    rw [hμΔ]
+    exact ENNReal.mul_ne_top (measure_ne_top _ _) ENNReal.ofReal_ne_top
+  have hint : Integrable (fun _ : Q ↦ (1 : ℂ)) ν := by
+    rw [weilFundamentalDomain_integrable_iff Γ hΓ μ hΔ hbij ν hν]
+    exact (integrable_indicator_iff hΔ).mpr (integrableOn_const hΔfin)
+  have heq := weilFundamentalDomain_integral Γ hΓ μ hΔ hbij ν hν hint
+  have hνfin : ν univ ≠ ∞ := by
+    have := (integrable_const_iff.mp hint).resolve_left one_ne_zero
+    exact measure_ne_top ν univ
+  simp only [integral_const, measureReal_restrict_apply_univ, Complex.real_smul, mul_one,
+    Complex.ofReal_inj] at heq
+  have hreal : ν.real univ = μ.real Δ := heq
+  rw [← ENNReal.ofReal_toReal hνfin, ← measureReal_def, hreal, measureReal_def,
+    ENNReal.ofReal_toReal hΔfin, hμΔ, mul_comm]
 
 include hm hγ hτ hμ hν in
 /-- Paper: Remark 4.4.2.7, p. 194. Dividing the quotient Haar measure by its
