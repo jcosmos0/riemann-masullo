@@ -485,7 +485,47 @@ include hγ hwidth in
 /-- Paper: Proposition 4.5.2.1(2), pp. 205–206. The interior of a strict-width
 window already meets every orbit. -/
 theorem modulatedCompactSupport_quotient_image_interior :
-    q '' (m ⁻¹' interior window) = (univ : Set Q) := by sorry
+    q '' (m ⁻¹' interior window) = (univ : Set Q) := by
+  let v : ℝ≥0ˣ → ℝ := fun t ↦ ((t.val : ℝ≥0) : ℝ)
+  have hv : Continuous v := NNReal.continuous_coe.comp Units.continuous_val
+  have hvpos (t : ℝ≥0ˣ) : 0 < v t := NNReal.coe_pos.mpr (Units.zero_lt _)
+  have hL : 0 < Real.log (v (m γ)) := Real.log_pos (by exact_mod_cast hγ)
+  -- The open window lies in the interior of the closed one.
+  have hsub : {t : ℝ≥0ˣ | v t ∈ Ioo (v (b / a)) (v (b * a))} ⊆ interior window := by
+    refine interior_maximal (fun t ht ↦ ⟨?_, ?_⟩) (isOpen_Ioo.preimage hv)
+    · exact Units.val_le_val.mp (NNReal.coe_le_coe.mp ht.1.le)
+    · exact Units.val_le_val.mp (NNReal.coe_le_coe.mp ht.2.le)
+  have hlo : Real.log (v (b / a)) = Real.log (v b) - Real.log (v a) := by
+    simp only [v, Units.val_div_eq_div_val, NNReal.coe_div]
+    exact Real.log_div (hvpos b).ne' (hvpos a).ne'
+  have hhi : Real.log (v (b * a)) = Real.log (v b) + Real.log (v a) := by
+    simp only [v, Units.val_mul, NNReal.coe_mul]
+    exact Real.log_mul (hvpos b).ne' (hvpos a).ne'
+  have hℓ (x : G) (n : ℤ) :
+      Real.log (v (m (x * γ ^ n))) = Real.log (v (m x)) + n * Real.log (v (m γ)) := by
+    simp only [v, map_mul, map_zpow, Units.val_mul, Units.val_zpow_eq_zpow_val, NNReal.coe_mul,
+      NNReal.coe_zpow]
+    rw [Real.log_mul (hvpos (m x)).ne' (zpow_pos (hvpos (m γ)) n).ne', Real.log_zpow]
+  -- Every orbit meets the open window, since it is wider than one period.
+  refine eq_univ_of_forall fun z ↦ ?_
+  obtain ⟨x, rfl⟩ := QuotientGroup.mk_surjective z
+  set lγ := Real.log (v (m γ))
+  set A₀ := Real.log (v b) - Real.log (v a)
+  let n : ℤ := ⌊(A₀ - Real.log (v (m x))) / lγ⌋ + 1
+  have hf := Int.floor_le ((A₀ - Real.log (v (m x))) / lγ)
+  have hf' := Int.lt_floor_add_one ((A₀ - Real.log (v (m x))) / lγ)
+  rw [le_div_iff₀ hL] at hf
+  rw [div_lt_iff₀ hL] at hf'
+  have hn : (n : ℝ) = ⌊(A₀ - Real.log (v (m x))) / lγ⌋ + 1 := by push_cast [n]; rfl
+  have hw : lγ < 2 * Real.log (v a) := hwidth
+  refine ⟨x * γ ^ n, hsub ?_, ?_⟩
+  · change v (m (x * γ ^ n)) ∈ Ioo (v (b / a)) (v (b * a))
+    constructor
+    · rw [← Real.log_lt_log_iff (hvpos _) (hvpos _), hlo, hℓ, hn]
+      nlinarith
+    · rw [← Real.log_lt_log_iff (hvpos _) (hvpos _), hhi, hℓ, hn]
+      nlinarith
+  · exact QuotientGroup.mk_mul_of_mem x (Subgroup.zpow_mem_zpowers γ n)
 
 include hk hperp ha hwidth in
 /-- Paper: Proposition 4.5.2.1(2) and Equation (4.5.2.1), p. 205. On a window
