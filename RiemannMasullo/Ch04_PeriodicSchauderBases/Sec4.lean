@@ -710,7 +710,7 @@ theorem modulatedCyclicQuotient_probabilityHaar :
   have htop : ENNReal.ofReal L * μ₁ univ ≠ ∞ :=
     ENNReal.mul_ne_top ENNReal.ofReal_ne_top (measure_ne_top μ₁ univ)
   constructor
-  rw [Measure.smul_apply, smul_eq_mul,
+  rw [smul_apply, smul_eq_mul,
     modulatedCyclicQuotient_measure_univ m γ hm hγ μ₁ ν τ hτ μ hμ hν,
     ENNReal.inv_mul_cancel h0 htop]
 
