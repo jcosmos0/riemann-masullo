@@ -8,6 +8,7 @@ import Mathlib.MeasureTheory.Function.AEEqOfIntegral
 import Mathlib.MeasureTheory.Function.StronglyMeasurable.Lp
 import Mathlib.MeasureTheory.Integral.Prod
 import RiemannMasullo.ForMathlib.MeasureTheory.Function.ContinuousMapDense
+import RiemannMasullo.ForMathlib.MeasureTheory.Group.Arithmetic
 import RiemannMasullo.ForMathlib.MeasureTheory.Integral.Bochner.Regular
 
 /-!
@@ -1119,12 +1120,108 @@ theorem modulatedSobolev_fourierDeriv_topology (_hm : IsModulation m)
 -- TODO(paper-gap): In Remark 9.1.2.3 the ordinary derivatives are on the Fourier side.
 -- The stated generalization to all locally compact abelian groups also needs a weight.
 
+/-- The Japanese bracket `(1 + |x|²)^(-s/2)` is Lebesgue integrable on the real line
+exactly when `s > 1`. -/
+private theorem integrable_one_add_sq_rpow_iff {s : ℝ} (hs : 0 ≤ s) :
+    Integrable (fun x : ℝ ↦ (1 + |x| ^ 2) ^ (-s / 2)) ↔ 1 < s := by
+  constructor
+  · intro h
+    have hI : IntegrableOn (fun x : ℝ ↦ x ^ (-s)) (Ioi 1) := by
+      refine (h.integrableOn.const_mul ((2 : ℝ) ^ (s / 2))).mono' ?_ ?_
+      · exact (continuousOn_id.rpow_const fun x hx ↦
+          Or.inl (zero_lt_one.trans hx).ne').aestronglyMeasurable measurableSet_Ioi
+      · refine (ae_restrict_mem measurableSet_Ioi).mono fun x (hx : 1 < x) ↦ ?_
+        have hx0 : 0 < x := zero_lt_one.trans hx
+        rw [Real.norm_eq_abs, abs_of_pos (Real.rpow_pos_of_pos hx0 _)]
+        have hle : 1 + |x| ^ 2 ≤ 2 * x ^ 2 := by
+          rw [abs_of_pos hx0]; nlinarith
+        have h1 : (2 * x ^ 2) ^ (-s / 2) ≤ (1 + |x| ^ 2) ^ (-s / 2) :=
+          Real.rpow_le_rpow_of_nonpos (by positivity) hle (by linarith)
+        have h2 : (2 * x ^ 2) ^ (-s / 2) = (2 : ℝ) ^ (-s / 2) * x ^ (-s) := by
+          rw [Real.mul_rpow (by norm_num) (by positivity), ← Real.rpow_natCast,
+            ← Real.rpow_mul hx0.le]
+          congr 2; ring
+        have h3 : (2 : ℝ) ^ (s / 2) * (2 : ℝ) ^ (-s / 2) = 1 := by
+          rw [← Real.rpow_add (by norm_num)]; ring_nf; exact Real.rpow_zero 2
+        calc x ^ (-s) = (2 : ℝ) ^ (s / 2) * ((2 : ℝ) ^ (-s / 2) * x ^ (-s)) := by
+              rw [← mul_assoc, h3, one_mul]
+          _ ≤ (2 : ℝ) ^ (s / 2) * (1 + |x| ^ 2) ^ (-s / 2) := by
+              rw [← h2]; gcongr
+    have := (integrableOn_Ioi_rpow_iff zero_lt_one).mp hI
+    linarith
+  · intro h
+    have := integrable_rpow_neg_one_add_norm_sq (E := ℝ) (μ := volume)
+      (r := s) (by simpa using h)
+    simpa [Real.norm_eq_abs] using this
+
+/-- In logarithmic coordinates, `(1 + |log t|²)^(-s/2)` is integrable for `dt/t` on the
+positive reals exactly when `s > 1`. -/
+private theorem integrable_positiveRealHaar_logBracket_iff {s : ℝ} (hs : 0 ≤ s) :
+    Integrable (fun t : ℝ≥0ˣ ↦ (1 + |Real.log ((t.val : ℝ≥0) : ℝ)| ^ 2) ^ (-s / 2))
+      positiveRealHaar ↔ 1 < s := by
+  have : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  have hne (t : ℝ≥0ˣ) : ((t.val : ℝ≥0) : ℝ) ≠ 0 := NNReal.coe_ne_zero.mpr t.ne_zero
+  have hFc : Continuous fun t : ℝ≥0ˣ ↦ (1 + |Real.log ((t.val : ℝ≥0) : ℝ)| ^ 2) ^ (-s / 2) :=
+    ((((NNReal.continuous_coe.comp Units.continuous_val).log hne).abs.pow 2).const_add
+      1).rpow_const fun t ↦ Or.inl (add_pos_of_pos_of_nonneg one_pos (sq_nonneg _)).ne'
+  have hE : Continuous fun x : ℝ ↦ Units.mk0 (Real.exp x).toNNReal
+      (Real.toNNReal_eq_zero.not.mpr (not_le_of_gt (Real.exp_pos x))) := by
+    rw [Units.continuous_iff]
+    refine ⟨continuous_real_toNNReal.comp Real.continuous_exp, ?_⟩
+    simp only [Units.val_inv_eq_inv_val, Units.val_mk0]
+    exact (continuous_real_toNNReal.comp Real.continuous_exp).inv₀ fun x ↦
+      Real.toNNReal_eq_zero.not.mpr (not_le_of_gt (Real.exp_pos x))
+  unfold positiveRealHaar
+  rw [integrable_map_measure hFc.aestronglyMeasurable hE.aemeasurable]
+  convert integrable_one_add_sq_rpow_iff hs using 3 with x
+  simp [Real.coe_toNNReal _ (Real.exp_pos x).le]
+
 /-- Paper: Lemma 9.1.2.4, p. 402. The reciprocal logarithmic Sobolev
 density is integrable exactly above degree one. -/
 theorem modulatedSobolev_reciprocal_integrable_iff (_hm : IsModulation m)
     (_hsurj : Function.Surjective m) {s : ℝ} (_hs : 0 ≤ s) :
-    Integrable (fun x ↦ (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 2)) μ ↔ 1 < s :=
-  by sorry
+    Integrable (fun x ↦ (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 2)) μ ↔ 1 < s := by
+  have : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  have : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  have : positiveRealHaar.IsHaarMeasure := positiveRealHaar_isHaarMeasure
+  set f : G → ℝ := fun x ↦ (1 + |Real.log ((m x).val : ℝ)| ^ 2) ^ (-s / 2)
+  set F : ℝ≥0ˣ → ℝ := fun t ↦ (1 + |Real.log ((t.val : ℝ≥0) : ℝ)| ^ 2) ^ (-s / 2)
+  have hne (t : ℝ≥0ˣ) : ((t.val : ℝ≥0) : ℝ) ≠ 0 := NNReal.coe_ne_zero.mpr t.ne_zero
+  have hFc : Continuous F :=
+    ((((NNReal.continuous_coe.comp Units.continuous_val).log hne).abs.pow 2).const_add
+      1).rpow_const fun t ↦ Or.inl (add_pos_of_pos_of_nonneg one_pos (sq_nonneg _)).ne'
+  have hfc : Continuous f := hFc.comp m.continuous
+  obtain ⟨τ', hτ'⟩ := _hm.exists_section
+  let r : ℝ≥0ˣ →ₜ* m.toMonoidHom.range :=
+    ⟨(MonoidHom.id ℝ≥0ˣ).codRestrict _ fun t ↦ _hsurj t, continuous_id.subtype_mk _⟩
+  let τ : ℝ≥0ˣ →ₜ* G := τ'.comp r
+  have hτ : Function.RightInverse τ m := fun t ↦ hτ' (r t)
+  have : CompactSpace m.toMonoidHom.ker := isCompact_iff_compactSpace.mp _hm.isCompact_ker
+  let μ₁ : Measure m.toMonoidHom.ker := Measure.haarMeasure ⊤
+  have hμ₁ : μ₁ univ = 1 := Measure.haarMeasure_self
+  have hcan := canonicalModulatedHaar_eq_map_prod m _hm τ hτ μ₁ hμ₁
+  have hνH : (canonicalModulatedHaar m _hm).IsHaarMeasure :=
+    (Classical.choose_spec (existsUnique_canonicalModulatedHaar m _hm).exists).1
+  have h1 : Integrable f μ ↔ Integrable f (canonicalModulatedHaar m _hm) := by
+    constructor
+    · intro h; rw [Measure.isMulLeftInvariant_eq_smul (canonicalModulatedHaar m _hm) μ]
+      exact h.smul_measure_nnreal
+    · intro h; rw [Measure.isMulLeftInvariant_eq_smul μ (canonicalModulatedHaar m _hm)]
+      exact h.smul_measure_nnreal
+  have hφ : Continuous fun z : m.toMonoidHom.ker × ℝ≥0ˣ ↦ (z.1 : G) * τ z.2 := by fun_prop
+  have h2 : Integrable f (canonicalModulatedHaar m _hm) ↔
+      Integrable (F ∘ Prod.snd) (μ₁.prod positiveRealHaar) := by
+    rw [hcan, integrable_map_measure hfc.aestronglyMeasurable hφ.aemeasurable]
+    congr! 1
+    funext z
+    have hk : m (z.1 : G) = 1 := z.1.property
+    simp only [Function.comp_apply, f, F, map_mul, hk, one_mul, hτ z.2]
+  have h3 : Integrable (F ∘ Prod.snd) (μ₁.prod positiveRealHaar) ↔
+      Integrable F positiveRealHaar := by
+    rw [← integrable_map_measure hFc.aestronglyMeasurable measurable_snd.aemeasurable,
+      Measure.map_snd_prod, hμ₁, one_smul]
+  rw [h1, h2, h3]
+  exact integrable_positiveRealHaar_logBracket_iff _hs
 
 /-- Paper: Proposition 9.1.2.5, p. 402. The unweighted product pairing on the group
 identifies the strong dual isometrically with the space of opposite degree. -/
