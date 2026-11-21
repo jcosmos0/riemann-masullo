@@ -6,6 +6,7 @@ public import RiemannMasullo.Ch03_IdelicZeta.Sec3
 public import RiemannMasullo.Ch05_ThetaZSpaces.Sec1
 public import Mathlib.Analysis.InnerProductSpace.TensorProduct
 public import Mathlib.Analysis.Fourier.LpSpace
+import RiemannMasullo.ForMathlib.MeasureTheory.Group.Arithmetic
 
 /-!
 # Hardy–Sobolev spaces and Paley–Wiener conditions
@@ -60,7 +61,123 @@ variable [SecondCountableTopology C[F]]
 modulated Haar measure times the Tamagawa mass of the norm-one classes. -/
 theorem ideleClassTamagawaMeasure_eq_smul_canonical :
     ideleClassTamagawaMeasure F =
-      (normOneIdeleClassTamagawaMeasure F) univ • canonicalModulatedHaar m[F] hm[F] := by sorry
+      (normOneIdeleClassTamagawaMeasure F) univ • canonicalModulatedHaar m[F] hm[F] := by
+  let K := (ideleClassNorm F).ker
+  let Q := C[F] ⧸ K
+  let μC := ideleClassTamagawaMeasure F
+  let μ₁ := normOneIdeleClassTamagawaMeasure F
+  have hV := (multiplicativeTamagawaMeasures_existsUnique F).exists.choose_spec
+  have hW := hV.2.2.2.2.2.2
+  obtain ⟨hKc, hKcpt, hK₂, -⟩ := ideleClassGroup_finiteness F
+  have : CompactSpace K := hKcpt
+  have : μC.IsHaarMeasure := hV.2.2.1.1
+  have : μC.Regular := hV.2.2.1.2.1
+  have : μ₁.IsHaarMeasure := hV.2.2.2.1
+  have : μ₁.Regular := hV.2.2.2.2.1
+  obtain ⟨-, -, -, -, -, -, -, -, hn, hsurj, ⟨s, hs, hsn⟩, -⟩ := ideleGroup_quotient.{_, 0} F
+  have : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  have : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  have : SFinite (positiveRealHaar : Measure ℝ≥0ˣ) := by unfold positiveRealHaar; infer_instance
+  -- The band of norms between 1 and e has `dt/t`-mass one.
+  let S : Set ℝ≥0ˣ := {t | ((t.val : ℝ≥0) : ℝ) ∈ Icc 1 (Real.exp 1)}
+  have hSm : MeasurableSet S :=
+    (NNReal.continuous_coe.comp Units.continuous_val).measurable measurableSet_Icc
+  have hPRS : positiveRealHaar S = 1 := by
+    let T : ℝ≥0ˣ := Units.mk0 (Real.exp 1).toNNReal (by positivity)
+    have hT : ((T.val : ℝ≥0) : ℝ) = Real.exp 1 := Real.coe_toNNReal _ (Real.exp_pos 1).le
+    have h := positiveRealHaar_interval T (by rw [hT]; exact Real.one_le_exp zero_le_one)
+    rw [hT, Real.log_exp, ENNReal.ofReal_one] at h
+    exact h
+  let B : Set C[F] := ideleClassNorm F ⁻¹' S
+  have hBm : MeasurableSet B := (hn.measurable) hSm
+  -- The canonical measure gives the band mass one.
+  have : CompactSpace m[F].toMonoidHom.ker := isCompact_iff_compactSpace.mp hm[F].isCompact_ker
+  obtain ⟨τ', hτ'⟩ := hm[F].exists_section
+  let r : ℝ≥0ˣ →ₜ* m[F].toMonoidHom.range :=
+    ⟨(MonoidHom.id ℝ≥0ˣ).codRestrict _ fun t ↦ hsurj t, continuous_id.subtype_mk _⟩
+  let τ : ℝ≥0ˣ →ₜ* C[F] := τ'.comp r
+  have hτ : RightInverse τ m[F] := fun t ↦ hτ' (r t)
+  let μ₀ : Measure m[F].toMonoidHom.ker := Measure.haarMeasure ⊤
+  have hcan := canonicalModulatedHaar_eq_map_prod m[F] hm[F] τ hτ μ₀ Measure.haarMeasure_self
+  have hφ : Continuous fun z : m[F].toMonoidHom.ker × ℝ≥0ˣ ↦ (z.1 : C[F]) * τ z.2 := by fun_prop
+  have hcanB : canonicalModulatedHaar m[F] hm[F] B = 1 := by
+    rw [hcan, Measure.map_apply hφ.measurable hBm]
+    have hpre : (fun z : m[F].toMonoidHom.ker × ℝ≥0ˣ ↦ (z.1 : C[F]) * τ z.2) ⁻¹' B =
+        univ ×ˢ S := by
+      ext ⟨k, t⟩
+      have hk : ideleClassNorm F (k : C[F]) = 1 := k.property
+      change ideleClassNorm F ((k : C[F]) * τ t) ∈ S ↔ _
+      rw [map_mul, hk, one_mul, show ideleClassNorm F (τ t) = t from hτ t]
+      simp
+    rw [hpre, Measure.prod_prod, show μ₀ univ = 1 from Measure.haarMeasure_self, one_mul, hPRS]
+  -- Weil's formula computes the class measure of the band.
+  let : MeasurableSpace Q := borel Q
+  have : BorelSpace Q := ⟨rfl⟩
+  let e₀ := QuotientGroup.quotientKerEquivOfRightInverse (ideleClassNorm F) s hsn
+  let e : Q ≃ₜ* ℝ≥0ˣ :=
+    { e₀ with
+      continuous_toFun := (QuotientGroup.isQuotientMap_mk K).continuous_iff.mpr hn
+      continuous_invFun := QuotientGroup.continuous_mk.comp hs }
+  have he : MeasurableEmbedding (QuotientGroup.kerLift (ideleClassNorm F)) :=
+    e.toHomeomorph.measurableEmbedding
+  have hkerLift (q : Q) : QuotientGroup.kerLift (ideleClassNorm F) q = ideleClassNorm F q.out := by
+    conv_lhs => rw [← Quotient.out_eq' q]
+    rfl
+  have hScpt : IsCompact S := by
+    let h := Nonneg.unitsHomeomorphPos ℝ
+    have hK : IsCompact {y : {x : ℝ // 0 < x} | y.val ∈ Icc 1 (Real.exp 1)} := by
+      rw [Topology.IsEmbedding.subtypeVal.isCompact_iff]
+      convert isCompact_Icc (a := (1 : ℝ)) (b := Real.exp 1) using 1
+      ext x
+      constructor
+      · rintro ⟨y, hy, rfl⟩
+        exact hy
+      · intro hx
+        exact ⟨⟨x, by linarith [hx.1]⟩, hx, rfl⟩
+    have hSeq : S = h ⁻¹' {y | y.val ∈ Icc 1 (Real.exp 1)} := rfl
+    rw [hSeq, ← h.image_symm]
+    exact hK.image h.symm.continuous
+  have hBcpt : IsCompact B := (isProperMap_ideleClassNorm F).isCompact_preimage hScpt
+  let f : C[F] → ℂ := B.indicator fun _ ↦ 1
+  have hfint : Integrable f μC :=
+    (integrable_indicator_iff hBm).mpr (integrableOn_const hBcpt.measure_lt_top.ne)
+  have hL1 := (weilQuotientIntegral_L1 K hKc μC μ₁ _ hW hfint).2.2
+  let B' : Set Q := QuotientGroup.kerLift (ideleClassNorm F) ⁻¹' S
+  have hB'm : MeasurableSet B' := he.measurable hSm
+  have hcoset (q : Q) : lcaCosetIntegral K μ₁ f q = (μ₁.real univ : ℂ) * B'.indicator 1 q := by
+    have hf (h : K) : f (q.out * (h : C[F])) = f q.out := by
+      have hh : ideleClassNorm F (h : C[F]) = 1 := h.property
+      simp only [f, B, indicator, mem_preimage, map_mul, hh, mul_one]
+    simp only [lcaCosetIntegral, hf, integral_const, Complex.real_smul, measureReal_def]
+    congr 1
+    simp only [f, B, B', indicator, mem_preimage, hkerLift, Pi.one_apply]
+  have hlhs : ∫ x, f x ∂μC = (μC.real B : ℂ) := by
+    simp only [f, integral_indicator hBm, setIntegral_const, Complex.real_smul, mul_one]
+  have hrhs : ∫ q, lcaCosetIntegral K μ₁ f q
+      ∂(positiveRealHaar.comap (QuotientGroup.kerLift (ideleClassNorm F))) =
+        (μ₁.real univ : ℂ) := by
+    have hdt : (positiveRealHaar.comap (QuotientGroup.kerLift (ideleClassNorm F))).real B' = 1 := by
+      have hsurj' : Surjective (QuotientGroup.kerLift (ideleClassNorm F)) := e.surjective
+      rw [measureReal_def, he.comap_apply, show QuotientGroup.kerLift (ideleClassNorm F) '' B' = S
+        from image_preimage_eq S hsurj', hPRS, ENNReal.toReal_one]
+    simp only [hcoset, integral_const_mul]
+    erw [integral_indicator hB'm]
+    simp only [Pi.one_apply, setIntegral_const, Complex.real_smul, mul_one, hdt,
+      Complex.ofReal_one]
+  have hμCB : μC B = μ₁ univ := by
+    have h : μC.real B = μ₁.real univ := by exact_mod_cast hlhs.symm.trans (hL1.trans hrhs)
+    rwa [measureReal_def, measureReal_def,
+      ENNReal.toReal_eq_toReal_iff' hBcpt.measure_lt_top.ne (measure_ne_top _ _)] at h
+  -- Compare the two Haar measures on the band.
+  have : (canonicalModulatedHaar m[F] hm[F]).IsHaarMeasure :=
+    (Classical.choose_spec (existsUnique_canonicalModulatedHaar m[F] hm[F]).exists).1
+  have hscale := Measure.isMulLeftInvariant_eq_smul μC (canonicalModulatedHaar m[F] hm[F])
+  set c := Measure.haarScalarFactor μC (canonicalModulatedHaar m[F] hm[F])
+  have hc : (c : ℝ≥0∞) = μ₁ univ := by
+    have h := congrArg (fun ν : Measure C[F] ↦ ν B) hscale
+    simp only [smul_apply, ENNReal.smul_def, smul_eq_mul] at h
+    rw [← hμCB, h, hcanB, mul_one]
+  exact hscale.trans (by rw [ENNReal.smul_def, hc])
 
 /-- Paper: Remark 9.2.0.1, p. 403. On the polar subspace the canonical theta integral
 converges at every character and computes the entire global Z-function after rescaling. -/
