@@ -2,6 +2,7 @@ module
 
 public import RiemannMasullo.Ch04_PeriodicSchauderBases.Sec4
 public import Mathlib.Topology.Algebra.Module.ContinuousLinearMap.Quotient
+import RiemannMasullo.ForMathlib.MeasureTheory.Measure.Count
 
 /-!
 # Periodic Schauder bases in the absence of multiplicity
@@ -602,7 +603,9 @@ include hγ in
 /-- Paper: Corollary 4.5.3.1 and Equation (4.5.3.2), p. 208. Counting
 measure on the discrete cyclic subgroup is regular Haar measure. -/
 theorem modulatedCyclic_countingMeasure :
-    (Measure.count : Measure Γ).IsHaarMeasure ∧ (Measure.count : Measure Γ).Regular := by sorry
+    (Measure.count : Measure Γ).IsHaarMeasure ∧ (Measure.count : Measure Γ).Regular := by
+  have : DiscreteTopology Γ := modulated_zpowers_discrete m γ hγ
+  exact ⟨count_isHaarMeasure_of_discreteTopology, count_regular_of_discreteTopology⟩
 
 local notation "cosetPeriodization" => (fun f : S₀ ↦
   letI := (modulatedCyclic_countingMeasure m γ hγ).1
