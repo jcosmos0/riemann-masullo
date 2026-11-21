@@ -13,7 +13,7 @@ Masullo, §§2.2.4–2.2.5, pp. 86–98.
 @[expose] public noncomputable section
 
 open Bornology Filter Function MeasureTheory NumberField Set Topology
-open scoped ContDiff Manifold NNReal NumberField.AdeleRing
+open scoped ContDiff Manifold NNReal NumberField.AdeleRing TensorProduct
 
 namespace RiemannMasullo
 
@@ -165,9 +165,72 @@ as in (2.2.4.4). -/
 def adeleDirectionalDeriv : ℬ[F] →ₗ[ℂ] ℬ[F] :=
   IsLinearMap.mk' _ (adeleDirectionalDeriv_isLinear γ)
 
+/-- Paper: Lemma 2.2.4.2, pp. 87–88. Differentiation of the archimedean orbit
+in the logarithmic parameter is a continuous complex-linear operator on
+archimedean Schwartz–Bruhat functions. -/
+theorem exists_archimedeanDirectionalDeriv :
+    ∃ D : SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)) →L[ℂ]
+        SchwartzBruhat (Multiplicative (InfiniteAdeleRing F)),
+      ∀ (f : SchwartzBruhat (Multiplicative (InfiniteAdeleRing F))) (x : InfiniteAdeleRing F),
+        D f (Multiplicative.ofAdd x) =
+          deriv (fun s : ℝ ↦ f (Multiplicative.ofAdd ((γ (expUnit s)).val.1 * x))) 0 := by
+  sorry
+
+/-- Tensoring a continuous endomorphism with the identity is continuous for
+the inductive tensor topology. -/
+private theorem continuous_inductiveTensorMap_id {A B : Type*}
+    [AddCommGroup A] [Module ℂ A] [TopologicalSpace A]
+    [AddCommGroup B] [Module ℂ B] [TopologicalSpace B] (L : A →L[ℂ] A) :
+    Continuous (inductiveTensorMap L.toLinearMap (LinearMap.id (M := B))) := by
+  let T := inductiveTensorMap L.toLinearMap (LinearMap.id (M := B))
+  let hS := withGeneratingSeminorms_spec (A ⊗[ℂ] B)
+    (fun p : {p : Seminorm ℂ (A ⊗[ℂ] B) //
+      (∀ f : A, Continuous (fun g : B ↦ p (f ⊗ₜ[ℂ] g))) ∧
+      (∀ g : B, Continuous (fun f : A ↦ p (f ⊗ₜ[ℂ] g)))} ↦ p.val)
+  refine hS.continuous_of_continuous_comp T fun p ↦ ?_
+  exact hS.continuous_seminorm
+    ⟨p.val.comp T, fun f ↦ p.property.1 (L f), fun g ↦ (p.property.2 g).comp L.continuous⟩
+
 /-- Paper: Lemma 2.2.4.2, p. 87. Formation of the directional derivative
 is continuous in the Schwartz–Bruhat topology. -/
-theorem adeleDirectionalDeriv_continuous : Continuous (adeleDirectionalDeriv γ) := by sorry
+theorem adeleDirectionalDeriv_continuous : Continuous (adeleDirectionalDeriv γ) := by
+  refine Exists.elim (adeleSchwartz_inductiveTensor_equiv F) fun e he ↦ ?_
+  refine Exists.elim (exists_archimedeanDirectionalDeriv γ) fun D hD ↦ ?_
+  let I := ContinuousLinearMap.id ℂ (SchwartzBruhat (Multiplicative 𝔸ᶠ[F]))
+  let T := inductiveTensorMap D.toLinearMap I.toLinearMap
+  have hleft : (adeleDirectionalDeriv γ).comp e.toLinearEquiv.toLinearMap =
+      e.toLinearEquiv.toLinearMap.comp T := by
+    apply TensorProduct.ext'
+    intro f g
+    apply Subtype.ext
+    funext y
+    let x := Multiplicative.toAdd y
+    have hOrbit (s : ℝ) :
+        e (f ⊗ₜ[ℂ] g)
+            (Multiplicative.ofAdd ((γ (expUnit s)).val * x)) =
+          f (Multiplicative.ofAdd ((γ (expUnit s)).val.1 * x.1)) *
+            g (Multiplicative.ofAdd x.2) := by
+      have hfinite : ((γ (expUnit s)).val * x).2 = x.2 := by
+        change (γ (expUnit s)).val.2 * x.2 = x.2
+        rw [adeleOneParameter_finite_eq_one γ (expUnit s), one_mul]
+      exact (he f g _).trans (congrArg (fun z : 𝔸ᶠ[F] ↦
+        f (Multiplicative.ofAdd ((γ (expUnit s)).val.1 * x.1)) *
+          g (Multiplicative.ofAdd z)) hfinite)
+    change deriv (fun s : ℝ ↦ e (f ⊗ₜ[ℂ] g)
+      (Multiplicative.ofAdd ((γ (expUnit s)).val * x))) 0 =
+        e (D f ⊗ₜ[ℂ] g) (Multiplicative.ofAdd x)
+    let u (s : ℝ) := f (Multiplicative.ofAdd ((γ (expUnit s)).val.1 * x.1))
+    let v := g (Multiplicative.ofAdd x.2)
+    exact (congrArg (fun k : ℝ → ℂ ↦ deriv k 0) (funext hOrbit)).trans
+      ((deriv_mul_const_field (u := u) v).trans
+        ((congrArg (· * v) (hD f x.1).symm).trans (he (D f) g x).symm))
+  have hcont : Continuous T :=
+    continuous_inductiveTensorMap_id (B := SchwartzBruhat (Multiplicative 𝔸ᶠ[F])) D
+  refine (e.continuous.comp (hcont.comp e.symm.continuous)).congr fun f ↦ ?_
+  change e (T (e.symm f)) = adeleDirectionalDeriv γ f
+  have h := DFunLike.congr_fun hleft (e.symm f)
+  change adeleDirectionalDeriv γ (e (e.symm f)) = e (T (e.symm f)) at h
+  simpa only [e.apply_symm_apply] using h.symm
 
 /-- Paper: Lemma 2.2.4.2, p. 87. The difference quotient in the positive real
 parameter converges to the directional derivative at every adele. -/
