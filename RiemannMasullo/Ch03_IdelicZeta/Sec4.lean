@@ -3,6 +3,7 @@ module
 public import RiemannMasullo.Ch03_IdelicZeta.Sec3b
 public import RiemannMasullo.AppC_LCTVS.Sec5b
 public import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Pow.Complex
+import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 
 /-!
 # Eigendistributions and Weil's identity
@@ -101,7 +102,95 @@ theorem weilModifiedFiniteIntegral_integerRing (v : V) (π : (v.adicCompletion F
     (hc : c.IsUnramifiedAt v) :
     weilModifiedFiniteIntegral v π
         ((v.adicCompletionIntegers F : Set (v.adicCompletion F)).indicator (fun _ ↦ 1)) c =
-      ((μv v) (v.adicCompletionIntegers F).units).toReal := by sorry
+      ((μv v) (v.adicCompletionIntegers F).units).toReal := by
+  let K := v.adicCompletion F
+  let O : Set K := v.adicCompletionIntegers F
+  let U : Set Kˣ := (v.adicCompletionIntegers F).units
+  let val := (valuation(v))
+  -- The uniformizer has valuation `exp (-1)`, the largest value below one.
+  have hval : val (π : K) = WithZero.exp (-1 : ℤ) := hπ.trans
+    (congrArg Units.val (Valuation.IsRankOneDiscrete.generator_eq_exp_neg_one_of_surjective
+      (v.valuedAdicCompletion_surjective F)))
+  have hlt (y : WithZero (Multiplicative ℤ)) (hy : y < 1) : y ≤ WithZero.exp (-1) := by
+    rcases eq_or_ne y 0 with rfl | h0
+    · exact zero_le
+    rw [← WithZero.exp_log h0] at hy ⊢
+    rw [WithZero.exp_lt_one_iff] at hy
+    rw [WithZero.exp_le_exp]
+    omega
+  have hmemO (x : K) : x ∈ O ↔ val x ≤ 1 := HeightOneSpectrum.mem_adicCompletionIntegers _ _ _
+  have hmemU (x : K) : x ∈ Units.val '' U ↔ val x = 1 := by
+    constructor
+    · rintro ⟨g, hg, rfl⟩
+      have h1 : val (g : K) ≤ 1 := (hmemO _).mp hg.1
+      have h2 : val ((g⁻¹ : Kˣ) : K) ≤ 1 := (hmemO _).mp hg.2
+      rw [Units.val_inv_eq_inv_val, map_inv₀] at h2
+      have hg0 : val (g : K) ≠ 0 := (Valuation.ne_zero_iff _).mpr g.ne_zero
+      exact le_antisymm h1 ((inv_le_one₀ (zero_lt_iff.mpr hg0)).mp h2)
+    · intro hx
+      have hx0 : x ≠ 0 := by
+        intro h
+        rw [h, map_zero] at hx
+        exact zero_ne_one hx
+      refine ⟨Units.mk0 x hx0, ⟨(hmemO _).mpr hx.le, (hmemO _).mpr ?_⟩, rfl⟩
+      simp only [Units.coeHom_apply, Units.val_inv_eq_inv_val, Units.val_mk0, map_inv₀, hx,
+        inv_one, le_refl]
+  have hπinv (x : K) : val ((↑π⁻¹ : K) * x) = WithZero.exp 1 * val x := by
+    rw [map_mul, Units.val_inv_eq_inv_val, map_inv₀, hval, ← WithZero.exp_neg, neg_neg]
+  -- The modified integer-ring indicator is the indicator of the integer units.
+  have htest : (fun x : K ↦ O.indicator (fun _ ↦ (1 : ℂ)) x -
+      O.indicator (fun _ ↦ (1 : ℂ)) ((↑π⁻¹ : K) * x)) =
+        (Units.val '' U).indicator (fun _ ↦ 1) := by
+    funext x
+    have he1 : (1 : WithZero (Multiplicative ℤ)) < WithZero.exp 1 := by simp
+    rcases lt_trichotomy (val x) 1 with h | h | h
+    · have hx : x ∈ O := (hmemO x).mpr h.le
+      have hx' : (↑π⁻¹ : K) * x ∈ O := by
+        rw [hmemO, hπinv]
+        calc WithZero.exp 1 * val x ≤ WithZero.exp 1 * WithZero.exp (-1) := by
+              gcongr
+              exact hlt _ h
+          _ = 1 := by rw [← WithZero.exp_add]; simp
+      have hU : x ∉ Units.val '' U := fun hU ↦ h.ne ((hmemU x).mp hU)
+      rw [indicator_of_mem hx, indicator_of_mem hx', indicator_of_notMem hU, sub_self]
+    · have hx : x ∈ O := (hmemO x).mpr h.le
+      have hx' : (↑π⁻¹ : K) * x ∉ O := by
+        rw [hmemO, hπinv, h, mul_one, not_le]
+        exact he1
+      have hU : x ∈ Units.val '' U := (hmemU x).mpr h
+      rw [indicator_of_mem hx, indicator_of_notMem hx', indicator_of_mem hU, sub_zero]
+    · have hx : x ∉ O := by rw [hmemO, not_le]; exact h
+      have hx' : (↑π⁻¹ : K) * x ∉ O := by
+        rw [hmemO, hπinv, not_le]
+        calc (1 : WithZero (Multiplicative ℤ)) = 1 * 1 := (mul_one 1).symm
+          _ < WithZero.exp 1 * val x := mul_lt_mul'' he1 h zero_le zero_le
+      have hU : x ∉ Units.val '' U := fun hU ↦ h.ne' ((hmemU x).mp hU)
+      rw [indicator_of_notMem hx, indicator_of_notMem hx', indicator_of_notMem hU, sub_zero]
+  -- The integer units are a compact open set on which the character is trivial.
+  have : BorelSpace Kˣ := ⟨rfl⟩
+  have hUo : IsOpen U := Submonoid.isOpen_units (Valued.isOpen_valuationSubring _)
+  have hUc : IsCompact U := by
+    have : ProperSpace K := properSpace_adicCompletion v
+    apply Submonoid.units_isCompact
+    change IsCompact (v.adicCompletionIntegers F : Set K)
+    convert isCompact_closedBall (0 : K) 1 using 1
+    ext x
+    simp only [SetLike.mem_coe, Metric.mem_closedBall, dist_zero_right,
+      Valued.toNormedField.norm_le_one_iff]
+    exact hmemO x
+  have : (μv v).IsHaarMeasure := finiteLocalMultiplicativeTamagawaMeasure_isHaarMeasure (F := F) v
+  have hcU (g : Kˣ) (hg : g ∈ U) : finitePlaceRestriction F v c g = 1 := by
+    let x := (v.adicCompletionIntegers F).toSubmonoid.unitsEquivUnitsType ⟨g, hg⟩
+    have h := HeckeCharacter.isUnramifiedAt_iff.mp hc x
+    simp only [HeckeCharacter.restrict, x] at h
+    have hxg : (((v.adicCompletionIntegers F).unitsEquivUnitsType ⟨g, hg⟩ :
+        v.adicCompletionIntegers F) : K) = (g : K) := rfl
+    rw [hxg, MulChar.ofUnitHom_coe, MonoidHom.comp_apply, MonoidHom.coe_toHomUnits] at h
+    exact h
+  unfold weilModifiedFiniteIntegral
+  simp only [hc, ↓reduceIte]
+  rw [htest]
+  exact localIdelicZetaIntegral_indicator (μv v) _ U hUo.measurableSet hUc.measure_ne_top hcU
 
 /-- Paper: Equation (3.4.1.1), p. 143. The modified zeta function is the
 archimedean integral times the product of the modified finite integrals. -/
