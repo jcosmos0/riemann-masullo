@@ -1942,6 +1942,35 @@ theorem finiteHeckeL_continuation_isBigO_exp (χ : U[F]) (L : ℂ → ℂ)
     simpa only [one_mul] using hBound
   exact hHO.congr' hAgree.symm EventuallyEq.rfl
 
+/-- A finite Hecke continuation is nonzero somewhere because its Dirichlet
+series tends to its first coefficient, one, along the positive real axis. -/
+private theorem finiteHeckeL_continuation_exists_ne_zero (χ : U[F]) (L : ℂ → ℂ)
+    (hSeries : ∀ s : halfPlane, L s = finiteHeckeL χ s) : ∃ s, L s ≠ 0 := by
+  let ψ := ideleClassNormTwist χ 0
+  have hCoeff : ψ.LFunction 1 = 1 := by
+    have hLocal (v : IsDedekindDomain.HeightOneSpectrum (𝓞 F)) : ψ.localEulerFactor v 1 = 1 := by
+      simp [NumberField.HeckeCharacter.localEulerFactor, NumberField.HeckeCharacter.localPowerSeries,
+        ArithmeticFunction.ofPowerSeries_apply_one, PowerSeries.constantCoeff_invOfUnit]
+    obtain ⟨S, hS⟩ := (heckeLocalEulerFactor_eventually_prod_eq ψ 1).exists
+    rw [← hS]
+    clear hS
+    classical
+    induction S using Finset.induction_on with
+    | empty => simp
+    | insert v S hv ih =>
+        rw [Finset.prod_insert hv, ArithmeticFunction.mul_apply_one, hLocal, ih, one_mul]
+  have hAbscissa : LSeries.abscissaOfAbsConv ψ.LFunction < ⊤ :=
+    (finiteHeckeL_seriesSummable χ ⟨2, by change 1 < (2 : ℂ).re; norm_num⟩).abscissaOfAbsConv_le.trans_lt
+      (EReal.coe_lt_top _)
+  have hLimit : Tendsto (fun t : ℝ ↦ L (t : ℂ)) atTop (𝓝 1) := by
+    rw [← hCoeff]
+    apply (LSeries.tendsto_atTop hAbscissa).congr'
+    filter_upwards [eventually_gt_atTop (1 : ℝ)] with t ht
+    exact (hSeries ⟨(t : ℂ), by change 1 < (t : ℂ).re; simpa using ht⟩).symm
+  by_contra! h
+  exact one_ne_zero (tendsto_nhds_unique_of_eventuallyEq hLimit tendsto_const_nhds
+    (Eventually.of_forall fun t ↦ h (t : ℂ)))
+
 /-- Paper: Equation (B.1.1.11), p. 590. The modulus of the completed functional equation's
 epsilon factor is unchanged by imaginary translation. In Tate's local factorization the
 archimedean phases have constant modulus and the finite norm powers have positive real bases. -/
@@ -1953,7 +1982,87 @@ private theorem completedHeckeL_continuation_epsilon_norm
     (hε : Differentiable ℂ ε) (hε₀ : ∀ s, ε s ≠ 0)
     (hEq : ∀ s, Λdual (1 - s) = ε s * Λ s) (s : ℂ) (t : ℝ) :
     ‖ε (s + (t : ℂ) * Complex.I)‖ = ‖ε s‖ := by
-  sorry
+  obtain ⟨fArch, fArchDual, c, hc, hFourier, hArch, hArchDual⟩ :=
+    exists_archimedeanHeckeTest_fourier χ
+  obtain ⟨f, a, b, q, ha, hb, hq, hf, hfDual⟩ :=
+    exists_globalHeckeTest_fourier χ fArch fArchDual c hc hFourier
+  let B (z : ℂ) := b * (q : ℂ) ^ z
+  have hq₀ : (q : ℂ) ≠ 0 := Complex.ofReal_ne_zero.mpr hq.ne'
+  have hB : Differentiable ℂ B :=
+    (differentiable_id.const_cpow (Or.inl hq₀)).const_mul b
+  have hB₀ (z : ℂ) : B z ≠ 0 := mul_ne_zero hb (Complex.cpow_ne_zero_iff.mpr (Or.inl hq₀))
+  let Z (z : ℂ) := globalIdelicZFunction (adeleSchwartzFourier f) (ideleClassNormTwist χ⁻¹ z)
+  have hZ := globalIdelicZFunction_meromorphic (adeleSchwartzFourier f) χ⁻¹
+  have hProd : MeromorphicNFOn (B * Λdual) univ := fun z hz ↦
+    (meromorphicNFAt_mul_iff_right (hB.analyticAt z) (hB₀ z)).mpr (hΛdual hz)
+  have hNear : ∀ᶠ z in 𝓝 (2 : ℂ), 1 < z.re :=
+    (isOpen_lt continuous_const Complex.continuous_re).mem_nhds (by norm_num)
+  -- Continue the Fourier-transformed integral from the half-plane of convergence.
+  have hOrd : meromorphicOrderAt (Z - B * Λdual) 2 = ⊤ := by
+    apply meromorphicOrderAt_eq_top_iff.mpr
+    filter_upwards [hNear.filter_mono nhdsWithin_le_nhds] with z hz
+    apply sub_eq_zero.mpr
+    change globalIdelicZFunction _ _ = B z * Λdual z
+    rw [globalIdelicZFunction_eq_integral _ (twist_mem_rightHalfPlane χ⁻¹ z hz),
+      hfDual ⟨z, hz⟩, hArchDual ⟨z, hz⟩, hDualSeries ⟨z, hz⟩]
+    rfl
+  have hZeq (z : ℂ) : Z z = B z * Λdual z := by
+    have h := (hZ.meromorphicOn.sub hProd.meromorphicOn).meromorphicOrderAt_eq_top_of_isPreconnected
+      isPreconnected_univ (mem_univ (2 : ℂ)) (mem_univ z) hOrd
+    have he : Z =ᶠ[𝓝[≠] z] B * Λdual :=
+      (meromorphicOrderAt_eq_top_iff.mp h).mono fun _ hz ↦ sub_eq_zero.mp hz
+    exact (((hZ (mem_univ z)).eventuallyEq_nhdsNE_iff_eventuallyEq_nhds
+      (hProd (mem_univ z))).mp he).eq_of_nhds
+  have hDual (z : ℂ) : dualQuasiCharacter (G := IdeleClassGroup (𝓞 F) F)
+      (ideleClassNorm F) (isProperMap_ideleClassNorm F).continuous (ideleClassNormTwist χ z) =
+      ideleClassNormTwist χ⁻¹ (1 - z) := by
+    ext1 g
+    let N : ℂ := (((ideleClassNorm F g : ℝ≥0) : ℝ) : ℂ)
+    have hN : N ≠ 0 :=
+      Complex.ofReal_ne_zero.mpr (NNReal.coe_ne_zero.mpr (ideleClassNorm F g).ne_zero)
+    change N * ideleClassNormTwist χ z g⁻¹ = _
+    rw [map_inv]
+    change N * ((χ g : ℂ) * N ^ z)⁻¹ = (χ g : ℂ)⁻¹ * N ^ (1 - z)
+    rw [mul_inv_rev, Complex.cpow_sub _ _ hN, Complex.cpow_one, div_eq_mul_inv]
+    ac_rfl
+  -- Cancel the completed L-function near 2 and extend the resulting entire identity.
+  obtain ⟨z₀, hz₀⟩ := finiteHeckeL_continuation_exists_ne_zero χ
+    (fun z ↦ Λ z / heckeGammaFactor χ z) (fun z ↦ by
+      rw [hSeries z, completedHeckeL, mul_div_cancel_left₀ _
+        (heckeGammaFactor_ne_zero_of_re_pos χ (zero_lt_one.trans z.property))]
+      rfl)
+  have hNotTop : meromorphicOrderAt Λ 2 ≠ ⊤ := by
+    intro h
+    have h₀ := hΛ.meromorphicOn.meromorphicOrderAt_eq_top_of_isPreconnected isPreconnected_univ
+      (mem_univ (2 : ℂ)) (mem_univ z₀) h
+    have hn : Λ z₀ ≠ 0 := fun he ↦ hz₀ (by simp [he])
+    rw [(hΛ (mem_univ z₀)).meromorphicOrderAt_eq_zero_iff.mpr hn] at h₀
+    exact WithTop.zero_ne_top h₀
+  have hConst : (fun z ↦ B (1 - z) * ε z) = fun _ ↦ a := by
+    apply AnalyticOnNhd.eq_of_frequently_eq (z₀ := 2)
+    · exact fun z _ ↦ ((hB.analyticAt (1 - z)).comp (analyticAt_const.sub analyticAt_id)).mul
+        (hε.analyticAt z)
+    · exact fun _ _ ↦ analyticAt_const
+    apply Eventually.frequently
+    filter_upwards [hNear.filter_mono nhdsWithin_le_nhds,
+      (meromorphicOrderAt_ne_top_iff_eventually_ne_zero (hΛ (mem_univ _)).meromorphicAt).mp hNotTop]
+      with z hz hne
+    have he := globalIdelicZFunction_functionalEquation f (ideleClassNormTwist χ z)
+    rw [hDual] at he
+    change globalIdelicZFunction f (ideleClassNormTwist χ z) = Z (1 - z) at he
+    rw [globalIdelicZFunction_eq_integral _ (twist_mem_rightHalfPlane χ z hz), hf ⟨z, hz⟩,
+      hArch ⟨z, hz⟩, hZeq, hEq] at he
+    change a * completedHeckeL χ ⟨z, hz⟩ = B (1 - z) * (ε z * Λ z) at he
+    rw [← hSeries ⟨z, hz⟩, ← mul_assoc] at he
+    exact mul_right_cancel₀ hne he.symm
+  have hNorm (z : ℂ) : ‖a / ε z‖ = ‖b‖ * q ^ (1 - z.re) := by
+    rw [(div_eq_iff (hε₀ z)).mpr (congrFun hConst z).symm]
+    simp only [B, norm_mul, Complex.norm_cpow_eq_rpow_re_of_pos hq, Complex.sub_re, Complex.one_re]
+  apply inv_injective
+  apply mul_left_cancel₀ (norm_ne_zero_iff.mpr ha)
+  change ‖a‖ / ‖ε (s + (t : ℂ) * Complex.I)‖ = ‖a‖ / ‖ε s‖
+  rw [← norm_div, ← norm_div, hNorm, hNorm]
+  simp [Complex.add_re, Complex.mul_re]
 
 /-- Paper: Equation (B.1.1.11), p. 590. The finite functional equation has a
 multiplier given by the archimedean gamma ratio and a nonzero constant times a
@@ -2752,35 +2861,6 @@ private theorem heckeGammaRatio_isBigO_on_strip (χ : U[F]) (a b : ℝ) (hab : a
   exact (hRaw.mono (inf_le_inf_left _ (principal_mono.mpr
     (preimage_mono (Icc_subset_Icc hau hbv))))).congr' (hNF.filter_mono inf_le_left).symm
     EventuallyEq.rfl
-
-/-- A finite Hecke continuation is nonzero somewhere because its Dirichlet
-series tends to its first coefficient, one, along the positive real axis. -/
-private theorem finiteHeckeL_continuation_exists_ne_zero (χ : U[F]) (L : ℂ → ℂ)
-    (hSeries : ∀ s : halfPlane, L s = finiteHeckeL χ s) : ∃ s, L s ≠ 0 := by
-  let ψ := ideleClassNormTwist χ 0
-  have hCoeff : ψ.LFunction 1 = 1 := by
-    have hLocal (v : IsDedekindDomain.HeightOneSpectrum (𝓞 F)) : ψ.localEulerFactor v 1 = 1 := by
-      simp [NumberField.HeckeCharacter.localEulerFactor, NumberField.HeckeCharacter.localPowerSeries,
-        ArithmeticFunction.ofPowerSeries_apply_one, PowerSeries.constantCoeff_invOfUnit]
-    obtain ⟨S, hS⟩ := (heckeLocalEulerFactor_eventually_prod_eq ψ 1).exists
-    rw [← hS]
-    clear hS
-    classical
-    induction S using Finset.induction_on with
-    | empty => simp
-    | insert v S hv ih =>
-        rw [Finset.prod_insert hv, ArithmeticFunction.mul_apply_one, hLocal, ih, one_mul]
-  have hAbscissa : LSeries.abscissaOfAbsConv ψ.LFunction < ⊤ :=
-    (finiteHeckeL_seriesSummable χ ⟨2, by change 1 < (2 : ℂ).re; norm_num⟩).abscissaOfAbsConv_le.trans_lt
-      (EReal.coe_lt_top _)
-  have hLimit : Tendsto (fun t : ℝ ↦ L (t : ℂ)) atTop (𝓝 1) := by
-    rw [← hCoeff]
-    apply (LSeries.tendsto_atTop hAbscissa).congr'
-    filter_upwards [eventually_gt_atTop (1 : ℝ)] with t ht
-    exact (hSeries ⟨(t : ℂ), by change 1 < (t : ℂ).re; simpa using ht⟩).symm
-  by_contra! h
-  exact one_ne_zero (tendsto_nhds_unique_of_eventuallyEq hLimit tendsto_const_nhds
-    (Eventually.of_forall fun t ↦ h (t : ℂ)))
 
 /-- Paper: Equation (B.1.1.10), p. 590. The reflection factor in the functional
 equation satisfies the stated power bound on every fixed closed vertical strip. -/
