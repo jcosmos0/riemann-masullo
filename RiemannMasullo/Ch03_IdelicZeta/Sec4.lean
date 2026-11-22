@@ -3,6 +3,7 @@ module
 public import RiemannMasullo.Ch03_IdelicZeta.Sec3b
 public import RiemannMasullo.AppC_LCTVS.Sec5b
 public import RiemannMasullo.ForMathlib.Analysis.SpecialFunctions.Pow.Complex
+import all RiemannMasullo.Ch03_IdelicZeta.Sec3
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 
 /-!
@@ -98,7 +99,80 @@ theorem weilModifiedFiniteIntegral_integrable (v : V) (π : (v.adicCompletion F)
       else f
     Integrable (fun g : (v.adicCompletion F)ˣ ↦ test g.val * finitePlaceRestriction F v c g)
       (μv v) := by
-  sorry
+  intro f test
+  let L := v.adicCompletion F
+  have : BorelSpace Lˣ := ⟨rfl⟩
+  -- The character has modulus a positive power of the local norm.
+  obtain ⟨-, -, -, -, -, hC₂, hClc, -⟩ := ideleGroup_quotient.{_, 0} F
+  let σ := quasiCharacterAbscissa (ideleClassNorm F) (isProperMap_ideleClassNorm F)
+    (ideleClassNorm_ne_one (F := F)) c
+  have hσ : 0 < σ := hc
+  have hnorm (g : Lˣ) : ‖finitePlaceRestriction F v c g‖ = ‖(g : L)‖ ^ σ := by
+    change ‖c (IdeleClassGroup.ofAdicCompletion (𝓞 F) F v g)‖ = _
+    rw [norm_quasiCharacter_eq_rpow_abscissa (ideleClassNorm F) (isProperMap_ideleClassNorm F)
+      (ideleClassNorm_ne_one (F := F)) c]
+    change (((ideleClassNorm F (IdeleClassGroup.ofAdicCompletion (𝓞 F) F v g) : ℝ≥0ˣ) : ℝ≥0) : ℝ) ^
+      σ = _
+    rw [ideleClassNorm_ofAdicCompletion]
+    rfl
+  -- The test function is bounded by two and vanishes outside a ball.
+  obtain ⟨R₀, hR₀⟩ := hK.exists_bound_of_continuousOn continuous_norm.continuousOn
+  let R := max R₀ (‖(π : L)‖ * R₀)
+  have hsupp (x : L) (hx : test x ≠ 0) : ‖x‖ ≤ R := by
+    have hcases : x ∈ K ∨ (↑π⁻¹ : L) * x ∈ K := by
+      by_contra h
+      push Not at h
+      apply hx
+      by_cases hu : c.IsUnramifiedAt v
+      · simp only [test, f, hu, ite_true]
+        rw [indicator_of_notMem h.1, indicator_of_notMem h.2, sub_self]
+      · simp only [test, f, hu, ite_false]
+        rw [indicator_of_notMem h.1]
+    rcases hcases with h | h
+    · exact (by simpa using hR₀ x h : ‖x‖ ≤ R₀).trans (le_max_left _ _)
+    · have h' : ‖(↑π⁻¹ : L) * x‖ ≤ R₀ := by simpa using hR₀ _ h
+      have hx : x = (π : L) * ((↑π⁻¹ : L) * x) := by
+        rw [← mul_assoc, Units.mul_inv, one_mul]
+      refine le_trans ?_ (le_max_right _ _)
+      rw [hx, norm_mul]
+      exact mul_le_mul_of_nonneg_left h' (norm_nonneg _)
+  have hbound (x : L) : ‖test x‖ ≤ 2 := by
+    have h1 (y : L) : ‖f y‖ ≤ 1 := by
+      by_cases hy : y ∈ K <;> simp [f, hy]
+    by_cases hu : c.IsUnramifiedAt v
+    · simp only [test, hu, ite_true]
+      exact (norm_sub_le _ _).trans (by linarith [h1 x, h1 ((↑π⁻¹ : L) * x)])
+    · simp only [test, hu, ite_false]
+      linarith [h1 x]
+  -- Measurability: the test function is a difference of indicators of open sets of units.
+  have hmeasf (a : L) : Measurable fun g : Lˣ ↦ f (a * g.val) := by
+    have hopen : IsOpen {g : Lˣ | a * g.val ∈ K} :=
+      hKo.preimage ((continuous_const.mul Units.continuous_val))
+    have heq : (fun g : Lˣ ↦ f (a * g.val)) = {g : Lˣ | a * g.val ∈ K}.indicator 1 := by
+      funext g
+      by_cases hg : a * g.val ∈ K <;> simp [f, hg]
+    rw [heq]
+    exact measurable_one.indicator hopen.measurableSet
+  have hmeas : Measurable fun g : Lˣ ↦ test g.val := by
+    by_cases hu : c.IsUnramifiedAt v
+    · simp only [test, hu, ite_true]
+      have h1 := hmeasf 1
+      simp only [one_mul] at h1
+      exact h1.sub (hmeasf _)
+    · simp only [test, hu, ite_false]
+      have h1 := hmeasf 1
+      simpa only [one_mul] using h1
+  -- Dominate by the truncated norm power.
+  have hb := finiteLocalTamagawa_integrable_norm_rpow v hσ R
+  refine (hb.2.const_mul 2).mono'
+    (hmeas.aestronglyMeasurable.mul (finitePlaceRestriction F v c).continuous.aestronglyMeasurable)
+    (ae_of_all _ fun g ↦ ?_)
+  rw [norm_mul, hnorm]
+  by_cases hg : test (g : L) = 0
+  · rw [hg, norm_zero, zero_mul]
+    exact mul_nonneg zero_le_two (Set.indicator_nonneg (fun _ _ ↦ by positivity) _)
+  · rw [indicator_of_mem (show g ∈ {u : Lˣ | ‖(u : L)‖ ≤ R} from hsupp _ hg)]
+    exact mul_le_mul_of_nonneg_right (hbound _) (by positivity)
 
 /-- Paper: Theorem 3.4.1.1, p. 144. At an unramified place the modified
 integer-ring indicator integrates to the Tamagawa mass of the integer units. -/
