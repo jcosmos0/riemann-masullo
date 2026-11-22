@@ -1214,7 +1214,149 @@ the norm-one group with dt/t transports to the quotient Tamagawa measure. -/
 theorem sLocalNormOneQuotientMeasure_existsUnique :
     ∃! ν : Measure J₁, ν.IsHaarMeasure ∧ ν.Regular ∧
       ∀ τ : ℝ≥0ˣ →ₜ* Iₛ, RightInverse τ (sIdeleNorm F S) →
-        (ν.prod positiveRealHaar).map (normProduct(τ)) = μJ := by sorry
+        (ν.prod positiveRealHaar).map (normProduct(τ)) = μJ := by
+  -- Topology and measurability of the S-ideles and their quotient.
+  let (v : S) : ProperSpace (v.val.adicCompletion F) := properSpace_adicCompletion v.val
+  let (w : InfinitePlace F) : SecondCountableTopology w.Completion :=
+    (InfinitePlace.Completion.isometry_extensionEmbedding w).isEmbedding.secondCountableTopology
+  have hind := (sIdeleGroup_description F S).1
+  let : SecondCountableTopology Aₛ := inferInstanceAs (SecondCountableTopology
+    (((w : InfinitePlace F) → w.Completion) × ((v : S) → v.val.adicCompletion F)))
+  let : SecondCountableTopology Iₛ := hind.secondCountableTopology
+  let : T2Space Iₛ := (sIdeleGroup_description F S).2.1
+  let : LocallyCompactSpace Iₛ := (sIdeleGroup_description F S).2.2.1
+  have : IsClosed (diagₛ : Set Iₛ) := isClosed_sProjectedDiagonal
+  have : BorelSpace Jₛ := ⟨rfl⟩
+  have : BorelSpace J₁ := ⟨rfl⟩
+  have hmc : Continuous mₛ := hmₛ
+  have : CompactSpace J₁ := isCompact_iff_compactSpace.mp
+    ((isProperMap_sIdeleQuotientNorm F S).isCompact_preimage isCompact_singleton)
+  have : BorelSpace ℝ≥0ˣ := borelSpace_units_of_continuousInv₀ ℝ≥0
+  have : SecondCountableTopology ℝ≥0ˣ := Units.isEmbedding_val₀.secondCountableTopology
+  have : positiveRealHaar.IsHaarMeasure := positiveRealHaar_isHaarMeasure
+  have hμJ := sLocalQuotientTamagawaMeasure_isWeil (F := F) (S := S)
+  have : (μJ).IsHaarMeasure := hμJ.1
+  -- Probability Haar measure on the compact norm-one group.
+  let ν₀ : Measure J₁ := Measure.haarMeasure ⊤
+  have hν₀ : ν₀ univ = 1 := Measure.haarMeasure_self
+  -- A norm section through one infinite place.
+  obtain ⟨w⟩ := (inferInstance : Nonempty (InfinitePlace F))
+  let s := singlePlaceIdeleNormSection F w
+  let p := Units.map (adeleProjection F S).toMonoidHom
+  have hp : Continuous p := (continuous_fst.prodMk (continuous_pi fun v : S ↦
+    (RestrictedProduct.continuous_eval v.val).comp continuous_snd)).units_map _
+  let τ₀ : ℝ≥0ˣ →ₜ* Iₛ := ⟨p.comp s, hp.comp (singlePlaceIdeleNormSection_continuous F w)⟩
+  have hτ₀ : RightInverse τ₀ (sIdeleNorm F S) := by
+    intro t
+    let A := integralAdelesOutside F S
+    have hmem (u : ℝ≥0ˣ) : (s u).val ∈ A := by
+      simp only [A, integralAdelesOutside, Subring.mem_iInf]
+      intro v _
+      exact (v.adicCompletionIntegers F).one_mem
+    have ht : s t ∈ A.toSubmonoid.units :=
+      ⟨hmem t, by
+        change ((s t)⁻¹).val ∈ A
+        rw [← map_inv]
+        exact hmem t⁻¹⟩
+    let g := A.toSubmonoid.unitsEquivUnitsType ⟨s t, ht⟩
+    exact ((sIdeleNorm_spec F S).1 g).symm.trans (singlePlaceIdeleNormSection_rightInverse F w t)
+  -- For each section, multiplication identifies the product with the quotient.
+  have hnorm (τ : ℝ≥0ˣ →ₜ* Iₛ) (hτ : RightInverse τ (sIdeleNorm F S)) (t : ℝ≥0ˣ) :
+      mₛ (classOf (τ t)) = t := (sIdeleQuotientNorm_mk F S (τ t)).trans (hτ t)
+  let E (τ : ℝ≥0ˣ →ₜ* Iₛ) (hτ : RightInverse τ (sIdeleNorm F S)) : (J₁ × ℝ≥0ˣ) ≃ₜ* Jₛ :=
+    { toFun := normProduct(τ)
+      invFun := fun y ↦ (⟨y * (classOf (τ (mₛ y)))⁻¹, by
+        rw [MonoidHom.mem_ker, map_mul, map_inv, hnorm τ hτ, mul_inv_cancel]⟩, mₛ y)
+      left_inv := fun x ↦ by
+        have hk : mₛ (x.1 : Jₛ) = 1 := x.1.property
+        have hx : mₛ ((x.1 : Jₛ) * classOf (τ x.2)) = x.2 := by
+          rw [map_mul, hk, one_mul, hnorm τ hτ]
+        refine Prod.ext (Subtype.ext ?_) hx
+        change (x.1 : Jₛ) * classOf (τ x.2) *
+          (classOf (τ (mₛ ((x.1 : Jₛ) * classOf (τ x.2)))))⁻¹ = x.1
+        rw [hx, mul_inv_cancel_right]
+      right_inv := fun y ↦ by simp
+      map_mul' := fun x y ↦ by
+        change ((x.1 * y.1 : J₁) : Jₛ) * classOf (τ (x.2 * y.2)) =
+          ((x.1 : Jₛ) * classOf (τ x.2)) * ((y.1 : Jₛ) * classOf (τ y.2))
+        rw [map_mul, QuotientGroup.mk_mul, Subgroup.coe_mul]
+        exact mul_mul_mul_comm _ _ _ _
+      continuous_toFun := by
+        have : Continuous (classOf) := QuotientGroup.continuous_mk
+        fun_prop
+      continuous_invFun := by
+        have : Continuous (classOf) := QuotientGroup.continuous_mk
+        refine Continuous.prodMk (Continuous.subtype_mk ?_ _) hmc
+        exact continuous_id.mul ((this.comp (τ.continuous.comp hmc)).inv) }
+  let M (τ : ℝ≥0ˣ →ₜ* Iₛ) : Measure Jₛ := (ν₀.prod positiveRealHaar).map (normProduct(τ))
+  have hMH (τ : ℝ≥0ˣ →ₜ* Iₛ) (hτ : RightInverse τ (sIdeleNorm F S)) : (M τ).IsHaarMeasure :=
+    (E τ hτ).isHaarMeasure_map (ν₀.prod positiveRealHaar)
+  -- The band of norms between one and e has mass one for each of these measures.
+  let T : Set ℝ≥0ˣ := {t | ((t.val : ℝ≥0) : ℝ) ∈ Icc 1 (Real.exp 1)}
+  have hTm : MeasurableSet T :=
+    (NNReal.continuous_coe.comp Units.continuous_val).measurable measurableSet_Icc
+  have hPRT : positiveRealHaar T = 1 := by
+    let T₀ : ℝ≥0ˣ := Units.mk0 (Real.exp 1).toNNReal (by positivity)
+    have hT₀ : ((T₀.val : ℝ≥0) : ℝ) = Real.exp 1 := Real.coe_toNNReal _ (Real.exp_pos 1).le
+    have h := positiveRealHaar_interval T₀ (by rw [hT₀]; exact Real.one_le_exp zero_le_one)
+    rw [hT₀, Real.log_exp, ENNReal.ofReal_one] at h
+    exact h
+  let B : Set Jₛ := mₛ ⁻¹' T
+  have hBm : MeasurableSet B := hmc.measurable hTm
+  have hMB (τ : ℝ≥0ˣ →ₜ* Iₛ) (hτ : RightInverse τ (sIdeleNorm F S)) : M τ B = 1 := by
+    have hφ : Continuous (normProduct(τ)) := (E τ hτ).continuous
+    rw [Measure.map_apply hφ.measurable hBm]
+    have hpre : normProduct(τ) ⁻¹' B = univ ×ˢ T := by
+      ext ⟨k, t⟩
+      have hk : mₛ (k : Jₛ) = 1 := k.property
+      change mₛ ((k : Jₛ) * classOf (τ t)) ∈ T ↔ _
+      rw [map_mul, hk, one_mul, hnorm τ hτ]
+      simp
+    rw [hpre, Measure.prod_prod, hν₀, one_mul, hPRT]
+  -- Every such measure is the same multiple of the quotient Tamagawa measure.
+  have hscale (τ : ℝ≥0ˣ →ₜ* Iₛ) (hτ : RightInverse τ (sIdeleNorm F S)) :
+      μJ = μJ B • M τ := by
+    have := hMH τ hτ
+    have h := Measure.isMulLeftInvariant_eq_smul μJ (M τ)
+    have hB := congrArg (fun ν : Measure Jₛ ↦ ν B) h
+    simp only [smul_apply, ENNReal.smul_def, smul_eq_mul, hMB τ hτ, mul_one] at hB
+    rw [hB, ← ENNReal.smul_def]
+    exact h
+  have hTcpt : IsCompact T := by
+    let h := Nonneg.unitsHomeomorphPos ℝ
+    have hK : IsCompact {y : {x : ℝ // 0 < x} | y.val ∈ Icc 1 (Real.exp 1)} := by
+      rw [Topology.IsEmbedding.subtypeVal.isCompact_iff]
+      convert isCompact_Icc (a := (1 : ℝ)) (b := Real.exp 1) using 1
+      ext x
+      constructor
+      · rintro ⟨y, hy, rfl⟩
+        exact hy
+      · intro hx
+        exact ⟨⟨x, by linarith [hx.1]⟩, hx, rfl⟩
+    have hTeq : T = h ⁻¹' {y | y.val ∈ Icc 1 (Real.exp 1)} := rfl
+    rw [hTeq, ← h.image_symm]
+    exact hK.image h.symm.continuous
+  have hBtop : μJ B ≠ ⊤ :=
+    ((isProperMap_sIdeleQuotientNorm F S).isCompact_preimage hTcpt).measure_lt_top.ne
+  have hB0 : μJ B ≠ 0 := by
+    intro h
+    have h' := hscale τ₀ hτ₀
+    rw [h, zero_smul] at h'
+    exact NeZero.ne μJ h'
+  have hmap (c : ENNReal) (τ : ℝ≥0ˣ →ₜ* Iₛ) (hτ : RightInverse τ (sIdeleNorm F S)) :
+      ((c • ν₀).prod positiveRealHaar).map (normProduct(τ)) = c • M τ := by
+    have hφ : Continuous (normProduct(τ)) := (E τ hτ).continuous
+    rw [Measure.prod_smul_left, Measure.map_smul _ hφ.aemeasurable]
+  refine ⟨μJ B • ν₀, ⟨Measure.IsHaarMeasure.smul _ hB0 hBtop, Measure.Regular.smul hBtop,
+    fun τ hτ ↦ (hmap _ τ hτ).trans (hscale τ hτ).symm⟩, ?_⟩
+  rintro ν' ⟨hν'H, hν'R, hν'⟩
+  have : SecondCountableTopology J₁ := TopologicalSpace.Subtype.secondCountableTopology _
+  have h := Measure.isMulLeftInvariant_eq_smul ν' ν₀
+  have hm' := hν' τ₀ hτ₀
+  rw [h, ENNReal.smul_def, hmap _ τ₀ hτ₀] at hm'
+  have hd := congrArg (fun ν : Measure Jₛ ↦ ν B) hm'
+  simp only [smul_apply, hMB τ₀ hτ₀, smul_eq_mul, mul_one] at hd
+  rw [h, ENNReal.smul_def, hd]
 
 /-- Paper: Theorem 3.3.1.1(3), p. 129. Normalize Haar measure on the
 norm-one S-idele quotient by splitting the quotient measure against dt/t. -/
