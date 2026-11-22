@@ -1147,7 +1147,76 @@ theorem infiniteLocalAdditiveTamagawaMeasure_selfDual (w : InfinitePlace F) :
 absolutely convergent on the positive half-plane. -/
 theorem infiniteLocalIdelicZetaIntegral_integrable (w : InfinitePlace F) (f : ℬ(w.Completion))
     (χ : PontryaginDual w.Completionˣ) {s : ℂ} (hs : s ∈ rightHalf) :
-    Integrable (fun g : w.Completionˣ ↦ test(f) g.val * chart∞[w, χ] s g) μ∞(w) := by sorry
+    Integrable (fun g : w.Completionˣ ↦ test(f) g.val * chart∞[w, χ] s g) μ∞(w) := by
+  let K := w.Completion
+  have hσ : 0 < s.re := hs
+  -- Measure the test function through the isometric embedding into the complex numbers.
+  let ι := InfinitePlace.Completion.extensionEmbedding w
+  have hι : Isometry ι := InfinitePlace.Completion.isometry_extensionEmbedding w
+  have hιn (x : K) : ‖ι x‖ = ‖x‖ := hι.norm_map_of_map_zero (map_zero ι) x
+  let m : Multiplicative K →* Multiplicative ℂ := ι.toAddMonoidHom.toMultiplicative
+  have hm : Continuous m := continuous_ofAdd.comp (hι.continuous.comp continuous_toAdd)
+  -- Compact subgroups of the completion are trivial, so every good subgroup is in the kernel.
+  have hk (a : BruhatStructuralPair (Multiplicative K)) : OrderDual.ofDual a.val.2 ≤ m.ker := by
+    let k := OrderDual.ofDual a.val.2
+    have hkc := isCompact_lcaDualAnnihilator (lcaAnnihilator k) a.property.2.2.1.2.1
+    rw [lcaDualAnnihilator_annihilator k a.property.2.2.1.1] at hkc
+    obtain ⟨B, hB⟩ := hkc.exists_bound_of_continuousOn (continuous_toAdd.comp hm).continuousOn
+    intro x hx
+    rw [MonoidHom.mem_ker]
+    by_contra h
+    have hy : 0 < ‖(m x).toAdd‖ := norm_pos_iff.mpr (fun h0 ↦ h (toAdd_eq_zero.mp h0))
+    obtain ⟨n, hn⟩ := exists_nat_gt (B / ‖(m x).toAdd‖)
+    have hn' := hB (x ^ n) (k.pow_mem hx n)
+    change ‖(m (x ^ n)).toAdd‖ ≤ B at hn'
+    rw [map_pow, toAdd_pow, RCLike.norm_nsmul ℝ, nsmul_eq_mul] at hn'
+    exact (not_lt_of_ge hn') ((div_lt_iff₀ hy).mp hn)
+  obtain ⟨-, -, -, hdecay⟩ := schwartzBruhat_exists_coordinate_bounds
+    (G := Multiplicative K) (T := PUnit.{1}) (fun _ ↦ PUnit.unit) (fun x ↦ ‖(m x).toAdd‖)
+    (fun _ ↦ norm_nonneg _) (fun _ ↦ ⟨univ, isCompact_univ, fun _ _ ↦ mem_univ _⟩)
+    (fun a e st N ↦ stage_exists_decay a e st N m hm (hk a)) f
+  -- A power of the norm larger than the exponent controls the growth of the character.
+  obtain ⟨k, hkσ⟩ := exists_nat_gt (2 * s.re)
+  have hwk : (w.mult : ℝ) * s.re < k := by
+    have hmult : (w.mult : ℝ) ≤ 2 := by
+      by_cases h : w.IsReal
+      · simp [h.mult_eq_one]
+      · simp [(InfinitePlace.not_isReal_iff_isComplex.mp h).mult_eq_two]
+    exact (mul_le_mul_of_nonneg_right hmult hσ.le).trans_lt hkσ
+  obtain ⟨B₀, hB₀, hb₀⟩ := hdecay 0
+  obtain ⟨B₁, hB₁, hb₁⟩ := hdecay k
+  have hBd (x : K) : ‖f (Multiplicative.ofAdd x)‖ * (max 1 ‖x‖) ^ k ≤ max B₀ B₁ := by
+    have hmx : ‖(m (Multiplicative.ofAdd x)).toAdd‖ = ‖x‖ := hιn x
+    rcases le_total ‖x‖ 1 with hx | hx
+    · have h := hb₀ (Multiplicative.ofAdd x)
+      rw [pow_zero, mul_one] at h
+      rw [max_eq_left hx, one_pow, mul_one]
+      exact h.trans (le_max_left _ _)
+    · have h := hb₁ (Multiplicative.ofAdd x)
+      rw [hmx] at h
+      rw [max_eq_right hx]
+      exact h.trans (le_max_right _ _)
+  have : BorelSpace K := ⟨rfl⟩
+  have : BorelSpace Kˣ := borelSpace_units_of_continuousInv₀ K
+  have ha := infiniteLocalTamagawa_integrable_norm_rpow w hσ k hwk
+  refine (ha.2.const_mul (max B₀ B₁)).mono' ?_ (ae_of_all _ fun g ↦ ?_)
+  · have hf : Continuous fun g : Kˣ ↦ f (Multiplicative.ofAdd g.val) :=
+      (schwartzBruhat_continuous (G := Multiplicative K) f).comp
+        (continuous_ofAdd.comp Units.continuous_val)
+    exact (hf.mul (chart∞[w, χ] s).continuous).aestronglyMeasurable
+  · have hchart : ‖chart∞[w, χ] s g‖ = ‖(g : K)‖ ^ ((w.mult : ℝ) * s.re) := by
+      change ‖(χ g : ℂ) * ((((m∞(w) g : ℝ≥0ˣ) : ℝ≥0) : ℝ) : ℂ) ^ s‖ = _
+      rw [norm_mul, Circle.norm_coe, one_mul,
+        Complex.norm_cpow_eq_rpow_re_of_pos (NNReal.coe_pos.mpr (Units.zero_lt _))]
+      have hval : (((m∞(w) g : ℝ≥0ˣ) : ℝ≥0) : ℝ) = ‖(g : K)‖ ^ w.mult := by
+        simp [MonoidHom.pow_apply, Units.val_pow_eq_pow_val]
+      rw [hval, ← Real.rpow_natCast, ← Real.rpow_mul (norm_nonneg _)]
+    rw [norm_mul, hchart]
+    change ‖f (Multiplicative.ofAdd (g : K))‖ * ‖(g : K)‖ ^ ((w.mult : ℝ) * s.re) ≤
+      max B₀ B₁ * (‖(g : K)‖ ^ ((w.mult : ℝ) * s.re) / (max 1 ‖(g : K)‖) ^ k)
+    have hD : 0 < (max 1 ‖(g : K)‖) ^ k := by positivity
+    rw [← mul_div_assoc, le_div_iff₀ hD, mul_right_comm]
+    exact mul_le_mul_of_nonneg_right (hBd _) (by positivity)
 
 /-- Paper: Equation (3.3.2.1), p. 137. The finite local zeta integral is
 absolutely convergent on the positive half-plane. -/
