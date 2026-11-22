@@ -651,7 +651,8 @@ theorem finiteStandardGaussian_integerUnit (v : V) (c : QuasiCharacter (v.adicCo
   split_ifs with hc
   · rw [indicator_of_mem (show u.val ∈ (v.adicCompletionIntegers F : Set _) from hu.1),
       hc u hu, inv_one]
-  · rw [indicator_of_mem (mem_image_of_mem _ hu), dif_pos u.ne_zero, Units.mk0_val]
+  · rw [indicator_of_mem (mem_image_of_mem _ hu)]
+    simp [u.ne_zero]
 
 local notation "infiniteUnitaryRestriction(" χ "," w ")" =>
   ((χ).comp ⟨IdeleClassGroup.ofCompletion (𝓞 F) F w, continuous_ideleClass_ofCompletion F w⟩)
