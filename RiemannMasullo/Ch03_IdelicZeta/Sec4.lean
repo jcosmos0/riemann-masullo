@@ -75,7 +75,42 @@ theorem weilArchimedeanIntegral_norm (fArch : ℬ(AArch)) :
 integrable at each quasi-character of positive abscissa. -/
 theorem weilArchimedeanIntegral_integrable (fArch : ℬ(AArch)) (c : X) (hc : c ∈ positive) :
     Integrable (fun g : AArchˣ ↦ fArch (Multiplicative.ofAdd g.val) *
-      c (classOf (sIdeleInsertion F ∅ g))) μArch := by sorry
+      c (classOf (sIdeleInsertion F ∅ g))) μArch := by
+  obtain ⟨-, -, -, -, -, hC₂, hClc, -⟩ := ideleGroup_quotient.{_, 0} F
+  let σ := quasiCharacterAbscissa (ideleClassNorm F) (isProperMap_ideleClassNorm F)
+    (ideleClassNorm_ne_one (F := F)) c
+  have hσ : 0 < σ := hc
+  -- Compare with the S-local integrand for the norm twist of exponent σ and S = ∅.
+  let c₀ : QuasiCharacter (SIdeleQuotient F ∅) :=
+    quasiCharacterNormTwist (sIdeleQuotientNorm F ∅)
+      (isProperMap_sIdeleQuotientNorm F ∅).continuous ((circleToComplex).comp 1) σ
+  have hc₀ := sLocalIdelicZetaIntegral_integrable fArch c₀ ⟨1, σ, by simpa using hσ, rfl⟩
+  have hnorm (g : AArchˣ) : ‖c (classOf (sIdeleInsertion F ∅ g))‖ =
+      ‖c₀ (QuotientGroup.mk g)‖ := by
+    rw [norm_quasiCharacter_eq_rpow_abscissa (ideleClassNorm F) (isProperMap_ideleClassNorm F)
+      (ideleClassNorm_ne_one (F := F)) c]
+    change (((ideleNorm F (sIdeleInsertion F ∅ g) : ℝ≥0ˣ) : ℝ≥0) : ℝ) ^ σ =
+      ‖((1 : Circle) : ℂ) * ((((sIdeleQuotientNorm F ∅ (QuotientGroup.mk g) : ℝ≥0ˣ) :
+        ℝ≥0) : ℝ) : ℂ) ^ (σ : ℂ)‖
+    rw [ideleNorm_sIdeleInsertion, sIdeleQuotientNorm_mk, Circle.coe_one, one_mul,
+      Complex.norm_cpow_eq_rpow_re_of_pos (NNReal.coe_pos.mpr (Units.zero_lt _)),
+      Complex.ofReal_re]
+  -- The σ-algebras of §3.3.1 on the archimedean ideles.
+  let (w : InfinitePlace F) : MeasurableSpace w.Completion := borel _
+  let (v : V) : MeasurableSpace (v.adicCompletion F) := borel _
+  let : MeasurableSpace (InfiniteAdeleRing F) :=
+    inferInstanceAs (MeasurableSpace ((w : InfinitePlace F) → w.Completion))
+  let : MeasurableSpace AArch := inferInstanceAs (MeasurableSpace
+    (InfiniteAdeleRing F × ((v : (∅ : Finset V)) → v.val.adicCompletion F)))
+  let : BorelSpace AArchˣ := sIdeleGroup_borelSpace
+  have hf : Continuous fun g : AArchˣ ↦ fArch (Multiplicative.ofAdd g.val) :=
+    (schwartzBruhat_continuous (G := Multiplicative AArch) fArch).comp
+      (continuous_ofAdd.comp Units.continuous_val)
+  have hcc : Continuous fun g : AArchˣ ↦ c (classOf (sIdeleInsertion F ∅ g)) :=
+    c.continuous.comp (QuotientGroup.continuous_mk.comp
+      (isClosedEmbedding_sIdeleInsertion F ∅).continuous)
+  refine hc₀.norm.mono' (hf.mul hcc).aestronglyMeasurable (ae_of_all _ fun g ↦ ?_)
+  rw [norm_mul, norm_mul, hnorm]
 
 open Classical in
 /-- Paper: Equations (3.4.1.3)–(3.4.1.4), p. 143. At an unramified place,
