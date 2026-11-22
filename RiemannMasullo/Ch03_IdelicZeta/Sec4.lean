@@ -63,7 +63,12 @@ integral of the test function weighted by the archimedean module. -/
 theorem weilArchimedeanIntegral_norm (fArch : ℬ(AArch)) :
     weilArchimedeanIntegral fArch (ideleClassNormTwist 1 1) =
       ∫ g : AArchˣ, fArch (Multiplicative.ofAdd g.val) *
-        (((sIdeleNorm F ∅ g : ℝ≥0) : ℝ) : ℂ) ∂μArch := by sorry
+        (((sIdeleNorm F ∅ g : ℝ≥0) : ℝ) : ℂ) ∂μArch := by
+  unfold weilArchimedeanIntegral
+  congr with g
+  rw [ideleClassNormTwist_one_one]
+  change _ * (((ideleNorm F (sIdeleInsertion F ∅ g) : ℝ≥0) : ℝ) : ℂ) = _
+  rw [ideleNorm_sIdeleInsertion]
 
 /-- Paper: Theorem 3.4.1.1, p. 143. The archimedean integrand is absolutely
 integrable at each quasi-character of positive abscissa. -/
